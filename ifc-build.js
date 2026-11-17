@@ -56,6 +56,79 @@ const FONTE_DN = {
   nome: 'nome do tipo'
 };
 
+/* Equipamentos cujas famílias trazem as uniões dos bocais desenhadas dentro do
+   mesmo elemento. Cada união vira uma peça própria (categoria "Conexão"), em vez
+   de ficar somada ao corpo do equipamento. Vale para equipamentos, não para as
+   categorias de rede (tubo, conexão, registro), cujos sólidos são partes do
+   próprio corpo (ex.: as pontas de um joelho). */
+const CATEGORIAS_SEM_UNIAO = new Set(['Tubo', 'Duto', 'Eletroduto / calha', 'Cabo',
+  'Conexão', 'Conexão de eletroduto', 'Registro / controle', 'Piso / laje', 'Parede']);
+const separaUnioes = (el) => !CATEGORIAS_SEM_UNIAO.has(el.categoria);
+
+/* Dentro de `geo.leaves`, acha os sólidos que são uniões: o sólido (que não é o
+   corpo) que contém uma porta de conexão do elemento, mais as peças pequenas
+   encostadas nele (gaxetas). Devolve grupos de folhas, um grupo por porta. */
+function acharUnioes(m, g, el, geo) {
+  const folhas = geo.leaves;
+  if (!folhas || folhas.length < 2) return [];
+  const caixa = (l) => {
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (let v = l.v0; v < l.v1; v++) for (let k = 0; k < 3; k++) {
+      const x = geo.pos[v * 3 + k];
+      if (x < mn[k]) mn[k] = x;
+      if (x > mx[k]) mx[k] = x;
+    }
+    return { mn, mx };
+  };
+  const vol = (b) => (b.mx[0] - b.mn[0]) * (b.mx[1] - b.mn[1]) * (b.mx[2] - b.mn[2]);
+  const L = folhas.map(l => Object.assign({}, l, caixa(l)));
+  const corpo = L.reduce((a, b) => vol(b) > vol(a) ? b : a);
+  const TOL = 0.01;   // 1 cm
+  // Uma união é compacta e pequena frente ao equipamento. Isso deixa no corpo as
+  // grades e chapas finas (retornos, sifonada), o corpo de bombas e drenos, e
+  // as peças miúdas de refletores, que também têm sólido sobre a porta.
+  const caixaTotal = { mn: [0, 1, 2].map(k => Math.min(...L.map(l => l.mn[k]))), mx: [0, 1, 2].map(k => Math.max(...L.map(l => l.mx[k]))) };
+  const MENOR_LADO_MIN = 0.03;   // 3 cm
+  const MAIOR_LADO_MAX = 0.15;   // 15 cm: acima disso é corpo (cabeça de bomba, motor)
+  const FRACAO_MAX = 0.10;       // até 10% do volume do equipamento
+  const pareceUniao = (l) => {
+    const lados = [l.mx[0] - l.mn[0], l.mx[1] - l.mn[1], l.mx[2] - l.mn[2]];
+    return Math.min(...lados) >= MENOR_LADO_MIN && Math.max(...lados) <= MAIOR_LADO_MAX &&
+      vol(l) <= FRACAO_MAX * vol(caixaTotal);
+  };
+  const encosta = (a, b) => [0, 1, 2].every(k => a.mn[k] <= b.mx[k] + TOL / 5 && b.mn[k] <= a.mx[k] + TOL / 5);
+
+  const grupos = [];
+  const usadas = new Set([corpo]);
+  for (const p of (m.portsOf.get(el.id) || [])) {
+    const pa = m.args(p);
+    if (!pa) continue;
+    const ponto = applyMat(g.localPlacement(m.ref(pa[5])), [0, 0, 0]).map(x => x * g.scale);
+    const dentro = (l) => [0, 1, 2].every(k => ponto[k] >= l.mn[k] - TOL && ponto[k] <= l.mx[k] + TOL);
+    const uniao = L.find(l => !usadas.has(l) && dentro(l) && pareceUniao(l));
+    if (!uniao) continue;
+    usadas.add(uniao);
+    const grupo = [uniao];
+    for (const l of L) {          // gaxetas e anéis: menores que a união e encostados nela
+      if (usadas.has(l) || vol(l) >= vol(uniao) || !encosta(l, uniao)) continue;
+      usadas.add(l); grupo.push(l);
+    }
+    grupos.push(grupo);
+  }
+  return grupos;
+}
+
+/* copia para uma geometria própria só as folhas indicadas */
+function fatiaGeometria(geo, folhas) {
+  const pos = [], idx = [];
+  for (const l of folhas) {
+    const desloc = pos.length / 3 - l.v0;
+    for (let v = l.v0 * 3; v < l.v1 * 3; v++) pos.push(geo.pos[v]);
+    for (let i = l.i0; i < l.i1; i++) idx.push(geo.idx[i] + desloc);
+  }
+  return pos.length ? { pos, idx } : null;
+}
+
 function splitFamilyType(s) {
   if (!s) return ['', ''];
   const i = s.indexOf(':');
@@ -260,13 +333,48 @@ async function buildIfcModel(text, onProgress) {
 
   /* ---- geometria unificada ---- */
   let totalV = 0, totalI = 0;
-  const parts = [];
-  for (let k = 0; k < elements.length; k++) {
+  const nOriginais = elements.length;
+  const parts = new Array(nOriginais).fill(null);   // paralelo a `elements`; as uniões entram no fim
+  for (let k = 0; k < nOriginais; k++) {
     const el = elements[k];
-    const geo = g.elementGeometry(el.id);
-    parts.push(geo);
+    let geo = g.elementGeometry(el.id);
+
+    // uniões embutidas no equipamento -> peças próprias, no fim da lista
+    if (geo && separaUnioes(el)) {
+      const grupos = acharUnioes(m, g, el, geo);
+      if (grupos.length) {
+        const sairam = new Set();
+        el.partes = [];
+        grupos.forEach((grupo, n) => {
+          const sub = fatiaGeometria(geo, grupo);
+          if (!sub) return;
+          grupo.forEach(l => sairam.add(l.i0));
+          const un = Object.assign({}, el, {
+            i: elements.length,
+            guid: el.guid + '#uniao' + (n + 1),
+            categoria: 'Conexão',
+            familia: 'União',
+            tipo: 'União do equipamento',
+            objType: 'União:' + el.familia,
+            tag: '',
+            tipoIfc: '', ifcType: el.ifcType,
+            dn: el.dn, dnFonte: el.dn ? 'porta' : '', dnPortas: [],
+            comprimento: 0, eixo: null, linear: false,
+            partes: undefined, parteDe: el.i, sintetico: true
+          });
+          elements.push(un);
+          parts.push(sub);
+          el.partes.push(un.i);
+          totalV += sub.pos.length / 3; totalI += sub.idx.length;
+        });
+        // o equipamento fica só com o que sobrou
+        const resto = geo.leaves.filter(l => !sairam.has(l.i0));
+        geo = fatiaGeometria(geo, resto);
+      }
+    }
+    parts[k] = geo;
     if (geo) { totalV += geo.pos.length / 3; totalI += geo.idx.length; }
-    if ((k & 31) === 0) await report(0.6 + k / elements.length * 0.32, 'Montando a geometria');
+    if ((k & 31) === 0) await report(0.6 + k / nOriginais * 0.32, 'Montando a geometria');
   }
 
   const positions = new Float32Array(totalV * 3);

@@ -483,7 +483,9 @@ class GeometryReader {
     if (!repId) return null;
     const base = this.localPlacement(placeId);
 
-    const out = { pos: [], idx: [], colors: [] };
+    // leaves: um registro por sólido de folha (faixa de vértices e de índices),
+    // para que o construtor possa separar partes de um mesmo elemento
+    const out = { pos: [], idx: [], colors: [], leaves: [] };
     const repA = this.m.args(repId);
     if (!repA) return null;
     for (const sr of this.m.refs(repA[2])) {
@@ -497,7 +499,17 @@ class GeometryReader {
     return out;
   }
 
+  /* registra cada sólido de folha; mapeamentos, estilos e booleanas só repassam */
   item(id, mat, out) {
+    const t = this.m.type(id);
+    if (!out.leaves || t === 'IFCMAPPEDITEM' || t === 'IFCSTYLEDITEM' ||
+        t === 'IFCBOOLEANCLIPPINGRESULT' || t === 'IFCBOOLEANRESULT') return this._item(id, mat, out);
+    const v0 = out.pos.length / 3, i0 = out.idx.length;
+    this._item(id, mat, out);
+    if (out.idx.length > i0) out.leaves.push({ id, v0, v1: out.pos.length / 3, i0, i1: out.idx.length });
+  }
+
+  _item(id, mat, out) {
     const t = this.m.type(id);
     const a = this.m.args(id);
     if (!a) return;

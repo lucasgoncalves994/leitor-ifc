@@ -62,6 +62,30 @@ Cada peça guarda `dnFonte`, e o painel mostra a origem. Não inventar diâmetro
 propriedade `Length` do arquivo com erro de 4,4 × 10⁻¹⁶ m. Se mexer na cadeia de
 posicionamento, refazer essa comparação.
 
+## Uniões embutidas em equipamentos
+
+Várias famílias de equipamento trazem as uniões dos bocais desenhadas dentro do
+mesmo elemento (o Trocador de Calor é um `IfcFlowTerminal` com 56 sólidos), então
+a união e o corpo eram selecionados e contados juntos.
+
+- `GeometryReader` registra cada sólido de folha em `geo.leaves` (faixas de
+  vértices e índices). `acharUnioes` (em `ifc-build.js`) separa o sólido que
+  contém uma `IfcDistributionPort` do elemento, mais as gaxetas encostadas nele;
+  o corpo é o sólido de maior caixa envolvente e nunca sai.
+- Cada união vira um elemento sintético no **fim** da lista (`sintetico: true`,
+  `parteDe` = índice do equipamento, `guid` com sufixo `#uniaoN`), categoria
+  "Conexão", DN herdado do equipamento. A contagem de elementos sobe de 722 para
+  740 (18 uniões); triângulos (507.828) e metros de tubo (641,10) não mudam.
+- Vale para todo equipamento, exceto as categorias de rede em
+  `CATEGORIAS_SEM_UNIAO` (tubo, conexão, registro...): ali os sólidos são partes
+  do próprio corpo, como as pontas de um joelho.
+- Só conta como união o sólido compacto: menor lado ≥ 3 cm, maior lado ≤ 15 cm e
+  volume ≤ 10% do equipamento (`pareceUniao`). Esses limites foram calibrados
+  neste modelo; sem eles, a regra tirava a grade do dreno, o corpo das bombas,
+  as chapas de retornos e da caixa sifonada e as peças dos refletores.
+  Separadas hoje: trocador (4), gerador de cloro (4), dosador (2), lâmpada UV (2),
+  filtros V-30 e V-80 (3 cada). Se entrar outro modelo, conferir o resultado.
+
 ## Decisões do visor que não são óbvias
 
 - **Geometria unificada.** Uma única malha com todos os triângulos; a
