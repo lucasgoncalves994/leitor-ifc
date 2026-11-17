@@ -104,6 +104,8 @@ a união e o corpo eram selecionados e contados juntos.
   sobra; padrão 50%, ajustável no painel Visor ("Visibilidade do resto",
   guardado em localStorage). A versão anterior pré-misturava a cor no vértice
   (22 a 28% da cor, sem iluminação) e o resto virava manchas chapadas.
+  O destaque (`meshConj` laranja, `meshSel` de foco) também é Lambert: chapado
+  (MeshBasic) ele virava uma mancha e só o contorno sobrava (foi a versão anterior).
   **Não trocar por `transparent: true`.**
 
 - **Render em dois passos quando há seleção.** Primeiro o contexto esmaecido,

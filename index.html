@@ -798,8 +798,9 @@ function construirCena() {
   const matFantasma = new THREE.MeshBasicMaterial({
     color: 0x6b7a8c, transparent: true, opacity: 0.075, depthWrite: false, side: THREE.DoubleSide
   });
-  const matSel = new THREE.MeshBasicMaterial({ color: 0xfff1a8, side: THREE.DoubleSide });
-  const matConj = new THREE.MeshBasicMaterial({ color: 0xff8a3d, side: THREE.DoubleSide });
+  // destaque iluminado (Lambert), para a peça mostrar o volume em vez de uma mancha chapada
+  const matSel = new THREE.MeshLambertMaterial({ color: 0xfff1a8, side: THREE.DoubleSide });
+  const matConj = new THREE.MeshLambertMaterial({ color: 0xff8a3d, side: THREE.DoubleSide });
   // resto do modelo enquanto há seleção: opaco e iluminado como o modelo normal, e só
   // depois misturado com o fundo no fim do fragmento (uFade = quanto da cor sobra).
   // Sem mesclagem (transparência) não há acúmulo onde os tubos se cruzam, então o
