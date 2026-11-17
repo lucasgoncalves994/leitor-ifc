@@ -374,6 +374,7 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
       <label class="swbox"><input type="checkbox" id="zoomClick" checked> Dar zoom na peça ao clicar</label>
       <label class="swbox"><input type="checkbox" id="focar" checked> Esmaecer o resto ao selecionar</label>
       <label class="swbox"><input type="checkbox" id="ghost" checked> Mostrar oculto em transparência</label>
+      <label class="swbox"><input type="checkbox" id="contorno" checked> Contorno nas peças (separa as conexões)</label>
       <label class="swbox"><input type="checkbox" id="grid" checked> Mostrar grade de referência</label>
       <label class="swbox"><input type="checkbox" id="flat"> Sombreamento plano (mostra as facetas)</label>
       <label class="fld" for="clip">Corte horizontal — cota <span id="clipV" class="mono"></span></label>
@@ -488,12 +489,14 @@ const TEMA3D = {
     fundo: 0x0b1016, grade: 0x27323f, fade: 0.22, ajusteCor: 1,
     fantasma: 0x6b7a8c, fantasmaOp: 0.075,
     foco: 0xfff1a8, conjunto: 0xff8a3d,
+    contorno: 0x04070b, contornoOp: 0.9,
     ceu: 0xdfeaf5, chao: 0x2a3340, ambiente: 1.05, luz1: 0.55, luz2: 0.35
   },
   light: {
     fundo: 0xf4f6f9, grade: 0xc7d0da, fade: 0.28, ajusteCor: 0.8,
     fantasma: 0x334155, fantasmaOp: 0.09,
     foco: 0xc2185b, conjunto: 0xd35400,
+    contorno: 0x111a24, contornoOp: 0.85,
     ceu: 0xffffff, chao: 0xb8c4d2, ambiente: 1.15, luz1: 0.45, luz2: 0.3
   }
 };
@@ -519,6 +522,7 @@ const S = {
   ghost: true,
   zoomClique: true,
   focar: true,             // esmaece o resto do modelo quando há seleção
+  contorno: true,          // silhueta em cada peça (passo de identificadores + borda na tela)
   pane: 'resumo',
   busca: '',
   ordem: { col: null, dir: 1 }
@@ -618,6 +622,87 @@ let meshSolido, meshFantasma, meshSel, meshConj, meshContexto, grade, raycaster;
 let idxSolido, triSolido, idxFantasma, idxContexto, triContexto;
 let nSolido = 0, nFantasma = 0, nContexto = 0;
 let corAttr, corFadeAttr, luzes = {}, precisaRender = true;
+let rtId, matId, cenaContorno, camContorno, matContorno;   // contorno por peça
+
+/* Contorno por peça, em tela: a cena é desenhada num alvo com o número de cada
+   peça no lugar da cor; depois um quadro cheio pinta o pixel onde o vizinho tem
+   outro número. Separa a peça do fundo e uma peça da outra (um tubo de uma
+   conexão), mesmo quando as duas têm a mesma cor. Não depende das normais. */
+function montarContorno(M) {
+  const eid = new Float32Array(M.positions.length / 3);
+  for (const e of M.elements) for (let v = e.vStart; v < e.vStart + e.vCount; v++) eid[v] = e.i + 1;   // 0 = fundo
+
+  if (!rtId) {
+    rtId = new THREE.WebGLRenderTarget(4, 4, {
+      minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true
+    });
+    matId = new THREE.ShaderMaterial({
+      side: THREE.DoubleSide, blending: THREE.NoBlending,
+      vertexShader: 'attribute float eid; varying float vId;' +
+        'void main(){ vId = eid; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying float vId;' +
+        'void main(){ float n = floor(vId + 0.5); float lo = mod(n, 256.0); float hi = floor(n / 256.0);' +
+        ' gl_FragColor = vec4(lo / 255.0, hi / 255.0, 0.0, 1.0); }'
+    });
+    matContorno = new THREE.ShaderMaterial({
+      transparent: true, depthTest: false, depthWrite: false,
+      uniforms: {
+        tId: { value: rtId.texture }, res: { value: new THREE.Vector2(1, 1) },
+        cor: { value: new THREE.Color(0x04070b) }, op: { value: 0.9 }, raio: { value: 1 }
+      },
+      vertexShader: 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: 'uniform sampler2D tId; uniform vec2 res; uniform vec3 cor; uniform float op; uniform float raio;' +
+        'float idDe(vec2 uv){ vec4 t = texture2D(tId, uv); return floor(t.r * 255.0 + 0.5) + 256.0 * floor(t.g * 255.0 + 0.5); }' +
+        'void main(){' +
+        '  vec2 uv = gl_FragCoord.xy / res; float c = idDe(uv);' +
+        '  if (c < 0.5) discard;' +
+        '  vec2 px = raio / res; bool borda = false;' +
+        '  for (int k = 0; k < 8; k++) {' +
+        '    float a = float(k) * 0.785398;' +                       // 8 direções
+        '    if (idDe(uv + vec2(cos(a), sin(a)) * px) < c - 0.5) borda = true;' +
+        '  }' +
+        '  if (!borda) discard;' +                                    // um lado só: a linha não dobra
+        '  gl_FragColor = vec4(cor, op); }'
+    });
+    cenaContorno = new THREE.Scene();
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matContorno);
+    quad.frustumCulled = false;
+    cenaContorno.add(quad);
+    camContorno = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  }
+  return new THREE.BufferAttribute(eid, 1);
+}
+
+function ajustarContorno() {
+  if (!rtId || !renderer) return;
+  const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
+  rtId.setSize(sz.x, sz.y);
+  matContorno.uniforms.res.value.set(sz.x, sz.y);
+  matContorno.uniforms.raio.value = 1.5 * Math.max(1, renderer.getPixelRatio());   // ~2 px de linha
+}
+
+function desenharContorno(foco) {
+  if (!S.contorno || !rtId) return;
+  const vis = { fan: meshFantasma.visible, ctx: meshContexto.visible, gr: grade ? grade.visible : false };
+  const cor = new THREE.Color(), alfa = renderer.getClearAlpha();
+  renderer.getClearColor(cor);
+  meshFantasma.visible = false; if (grade) grade.visible = false;
+  if (foco) meshContexto.visible = false;      // com seleção, só o destaque leva contorno
+
+  scene.overrideMaterial = matId;
+  renderer.setRenderTarget(rtId);
+  renderer.setClearColor(0x000000, 0);
+  renderer.autoClear = false;
+  renderer.clear();
+  renderer.render(scene, cam);
+  renderer.setRenderTarget(null);
+  scene.overrideMaterial = null;
+  renderer.setClearColor(cor, alfa);
+
+  renderer.render(cenaContorno, camContorno);  // sobre o quadro já desenhado
+  renderer.autoClear = true;
+  meshFantasma.visible = vis.fan; meshContexto.visible = vis.ctx; if (grade) grade.visible = vis.gr;
+}
 
 function construirCena() {
   const M = S.model, cv = $('#cv');
@@ -648,10 +733,12 @@ function construirCena() {
   triSolido = new Uint32Array(M.indices.length / 3);
   triContexto = new Uint32Array(M.indices.length / 3);
 
+  const eidAttr = montarContorno(M);
   const mk = (indice) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', pos);
     g.setAttribute('normal', nrm);
+    g.setAttribute('eid', eidAttr);
     g.setAttribute('color', corAttr);
     g.setIndex(new THREE.BufferAttribute(indice, 1));
     return g;
@@ -886,6 +973,7 @@ function redimensionar() {
   const w = st.clientWidth, h = st.clientHeight;
   if (!w || !h || !renderer) return;
   renderer.setSize(w, h, false);
+  ajustarContorno();
   cam.aspect = w / h; cam.updateProjectionMatrix();
   precisaRender = true;
 }
@@ -971,7 +1059,7 @@ function laco() {
   precisaRender = false;
 
   const foco = meshContexto && meshContexto.visible;
-  if (!foco) { renderer.autoClear = true; renderer.render(scene, cam); return; }
+  if (!foco) { renderer.autoClear = true; renderer.render(scene, cam); desenharContorno(false); return; }
 
   // 1º passo: o modelo esmaecido, com profundidade própria
   const v = {
@@ -990,6 +1078,7 @@ function laco() {
   renderer.render(scene, cam);
 
   meshContexto.visible = true; meshFantasma.visible = v.fan; if (grade) grade.visible = v.gr;
+  desenharContorno(true);
   renderer.autoClear = true;
 }
 laco();
@@ -1002,6 +1091,7 @@ function aplicarTema3D() {
   if (meshFantasma) { meshFantasma.material.color.setHex(t.fantasma); meshFantasma.material.opacity = t.fantasmaOp; }
   if (meshSel) meshSel.material.color.setHex(t.foco);
   if (meshConj) meshConj.material.color.setHex(t.conjunto);
+  if (matContorno) { matContorno.uniforms.cor.value.setHex(t.contorno); matContorno.uniforms.op.value = t.contornoOp; }
   if (luzes.amb) { luzes.amb.color.setHex(t.ceu); luzes.amb.groundColor.setHex(t.chao); luzes.amb.intensity = t.ambiente; }
   if (luzes.d1) luzes.d1.intensity = t.luz1;
   if (luzes.d2) luzes.d2.intensity = t.luz2;
@@ -1799,6 +1889,7 @@ $('#invert').onclick = () => { S.grupos.forEach(g => g.visivel = !g.visivel); at
 $('#zoomClick').onchange = e => { S.zoomClique = e.target.checked; };
 $('#focar').onchange = e => { S.focar = e.target.checked; atualizarVisibilidade(); };
 $('#ghost').onchange = e => { S.ghost = e.target.checked; atualizarVisibilidade(); };
+$('#contorno').onchange = e => { S.contorno = e.target.checked; precisaRender = true; };
 $('#grid').onchange = e => { if (grade) { grade.visible = e.target.checked; precisaRender = true; } };
 $('#flat').onchange = e => {
   meshSolido.material.flatShading = e.target.checked;

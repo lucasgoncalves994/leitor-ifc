@@ -120,6 +120,15 @@ a união e o corpo eram selecionados e contados juntos.
   rolagem automática. Shift + clique **parado** (menos de 5 px) soma à seleção;
   com movimento é deslocamento.
 
+- **Contorno por peça, em tela** (`montarContorno`, `desenharContorno`). Cada
+  vértice leva o número da peça (`eid`); um passo extra desenha a cena num alvo
+  com esse número no lugar da cor, e um quadro cheio pinta o pixel cujo vizinho
+  tem número menor (um lado só, ~2 px). Separa tubo de conexão mesmo com a mesma
+  cor, e não depende das normais (as faces facetadas têm normais planas, o que
+  quebraria o método do casco invertido). Com seleção ativa, só o destaque leva
+  contorno; o contexto esmaecido não. Checkbox "Contorno nas peças"; cores em
+  `TEMA3D.contorno`. Custa um passo de desenho a mais por quadro.
+
 - **Tabelas: Shift+clique seleciona intervalo.** `cliqueLinha` guarda a última
   linha clicada como âncora (`ancoraTabela`) e seleciona tudo entre ela e a
   linha atual; a âncora não muda no Shift+clique. Ctrl/Cmd+clique soma ou tira
