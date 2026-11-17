@@ -706,8 +706,19 @@ function ajustarContorno() {
   matContorno.uniforms.raio.value = 1.5 * Math.max(1, renderer.getPixelRatio());   // ~2 px de linha
 }
 
+/* O contorno custa um passo de desenho a mais (no modelo inteiro, quando não há
+   seleção). Enquanto a câmera se move ele é pulado e volta ~0,2 s depois que ela
+   para, então girar e dar zoom custam o mesmo de antes. */
+let ultimoMovimento = 0, timerContorno = 0;
+const ATRASO_CONTORNO = 200;   // ms parado até o contorno voltar
+
 function desenharContorno(foco) {
   if (!S.contorno || !rtId) return;
+  if (performance.now() - ultimoMovimento < ATRASO_CONTORNO) {
+    clearTimeout(timerContorno);
+    timerContorno = setTimeout(() => { precisaRender = true; }, ATRASO_CONTORNO + 20);
+    return;
+  }
   const vis = { fan: meshFantasma.visible, ctx: meshContexto.visible, gr: grade ? grade.visible : false };
   const cor = new THREE.Color(), alfa = renderer.getClearAlpha();
   renderer.getClearColor(cor);
@@ -898,6 +909,7 @@ function posicionarCamera() {
   if (cam.near !== perto || cam.far !== longe) {
     cam.near = perto; cam.far = longe; cam.updateProjectionMatrix();
   }
+  ultimoMovimento = performance.now();
   precisaRender = true;
 }
 
