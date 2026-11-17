@@ -120,6 +120,13 @@ a união e o corpo eram selecionados e contados juntos.
   rolagem automática. Shift + clique **parado** (menos de 5 px) soma à seleção;
   com movimento é deslocamento.
 
+- **Tabelas: Shift+clique seleciona intervalo.** `cliqueLinha` guarda a última
+  linha clicada como âncora (`ancoraTabela`) e seleciona tudo entre ela e a
+  linha atual; a âncora não muda no Shift+clique. Ctrl/Cmd+clique soma ou tira
+  uma linha. Sem âncora na mesma tabela, Shift+clique soma, como antes. A âncora
+  vale só até a tabela ser redesenhada (ex.: ao ocultar peças). No visor 3D,
+  Shift+clique continua somando uma peça por vez.
+
 - **Dois temas sobre os mesmos tokens CSS.** Paleta clara no `:root` base,
   escura em `@media (prefers-color-scheme: dark)` e em `[data-theme="dark"]`.
   O visor 3D tem a sua própria tabela (`TEMA3D`): fundo, grade, luzes, cor de

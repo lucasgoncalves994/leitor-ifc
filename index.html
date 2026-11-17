@@ -1536,6 +1536,36 @@ function detalheElemento(p, e, compacto) {
    ========================================================= */
 let tabelaAtual = [];       // para o botão copiar
 
+/* Âncora do intervalo: a última linha clicada e a lista de linhas da tabela dela.
+   Shift+clique seleciona tudo entre a âncora e a linha clicada (como no Explorer);
+   a âncora não muda, então outro Shift+clique refaz o intervalo a partir dela. */
+let ancoraTabela = null;    // { itens, pos }
+
+function cliqueLinha(ev, itens, pos, clicar) {
+  if (ev.shiftKey && ancoraTabela && ancoraTabela.itens === itens) {
+    const de = Math.min(ancoraTabela.pos, pos), ate = Math.max(ancoraTabela.pos, pos);
+    const ids = new Set(), chaves = new Set();
+    for (let k = de; k <= ate; k++) {
+      for (const i of itens[k].ids) ids.add(i);
+      if (itens[k].chave) chaves.add(itens[k].chave);
+    }
+    selecionarIntervalo([...ids], chaves);
+    return;
+  }
+  ancoraTabela = { itens, pos };
+  if (ev.ctrlKey || ev.metaKey || ev.shiftKey) alternarNaSelecao(itens[pos].ids.slice());  // sem âncora: soma
+  else clicar();
+}
+
+function selecionarIntervalo(ids, chaves) {
+  const visiveis = ids.filter(i => elementoVisivel(i));
+  const usar = visiveis.length ? visiveis : ids;
+  S.conj = { rotulo: 'Seleção por intervalo', ids: usar, i: -1, chave: null, chaves };
+  S.sel = -1;
+  painelElemento(); atualizarDestaque(); marcarLinha();
+  enquadrar(usar, true);
+}
+
 function tabela(colunas, linhas, opts) {
   opts = opts || {};
   const t = el('table');
@@ -1546,22 +1576,24 @@ function tabela(colunas, linhas, opts) {
   }
   thead.appendChild(tr); t.appendChild(thead);
   const tb = el('tbody');
+  const itens = [];           // linhas selecionáveis desta tabela, na ordem em que aparecem
   for (const L of linhas) {
     const r = el('tr');
     if (L._tot) r.className = 'tot';
     if (L._el != null) {
+      const pos = itens.length;
+      itens.push({ ids: [L._el], chave: null });
       r.className = (r.className + ' clickable').trim();
       r.dataset.el = L._el;
-      r.title = 'Clique para ver a peça. Shift+clique soma à seleção.';
-      r.onclick = (ev) => { if (somando(ev)) alternarNaSelecao([L._el]); else selecionar(L._el, true); };
+      r.title = 'Clique para ver a peça. Shift+clique seleciona o intervalo até a última linha clicada; Ctrl+clique soma ou tira uma linha.';
+      r.onclick = (ev) => cliqueLinha(ev, itens, pos, () => selecionar(L._el, true));
     } else if (L._els && L._els.length) {
+      const pos = itens.length;
+      itens.push({ ids: L._els, chave: L._chave });
       r.className = (r.className + ' clickable').trim();
       r.dataset.conj = L._chave;
-      r.title = 'Clique para destacar as ' + L._els.length + ' peças no 3D. Shift+clique soma à seleção atual.';
-      r.onclick = (ev) => {
-        if (somando(ev)) alternarNaSelecao(L._els.slice());
-        else selecionarConjunto(L._rotulo, L._els.slice(), L._chave);
-      };
+      r.title = 'Clique para destacar as ' + L._els.length + ' peças no 3D. Shift+clique seleciona o intervalo até a última linha clicada; Ctrl+clique soma ou tira uma linha.';
+      r.onclick = (ev) => cliqueLinha(ev, itens, pos, () => selecionarConjunto(L._rotulo, L._els.slice(), L._chave));
     }
     colunas.forEach((c, i) => {
       const td = el('td', c.n ? 'n' : null);
@@ -1732,11 +1764,15 @@ function renderCorpoElementos() {
 }
 
 function marcarLinha() {
+  const porIntervalo = S.conj && S.conj.chaves ? S.conj : null;
+  const noIntervalo = porIntervalo ? new Set(porIntervalo.ids) : null;
   document.querySelectorAll('tbody tr[data-el]').forEach(tr => {
     tr.classList.toggle('sel', +tr.dataset.el === S.sel);
+    tr.classList.toggle('conj', !!noIntervalo && noIntervalo.has(+tr.dataset.el));
   });
   document.querySelectorAll('tbody tr[data-conj]').forEach(tr => {
-    tr.classList.toggle('conj', !!S.conj && tr.dataset.conj === S.conj.chave);
+    tr.classList.toggle('conj', !!S.conj && (tr.dataset.conj === S.conj.chave ||
+      (!!porIntervalo && porIntervalo.chaves.has(tr.dataset.conj))));
   });
 }
 
