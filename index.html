@@ -1,0 +1,1926 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leitor IFC da Piscina</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+(function () {
+  var r = document.documentElement;
+  r.dataset.temaHost = r.getAttribute('data-theme') || '';
+  var m = null;
+  try { m = localStorage.getItem('leitor-ifc-tema'); } catch (e) { }
+  if (m === 'light' || m === 'dark') r.setAttribute('data-theme', m);
+})();
+</script>
+<style>
+/* Prancha de projeto: painéis fixos nas laterais, visor 3D no centro,
+   quantitativos numa gaveta inferior. Dois temas sobre os mesmos tokens. */
+/* Paleta clara como base; a escura redefine os mesmos tokens. */
+:root{
+  color-scheme: light;
+  --bg:#eef1f5;
+  --surface:#ffffff;
+  --surface-2:#f3f6f9;
+  --surface-3:#e6ebf1;
+  --line:#cdd6e0;
+  --line-soft:#e1e7ee;
+  --text:#16222f;
+  --text-dim:#55677c;
+  --text-faint:#7d8ea3;
+  --accent:#1d6fc4;
+  --accent-dim:#d4e6f8;
+  --good:#17895e;
+  --warn:#9a6508;
+  --crit:#b3272c;
+  --conj:#d35400;
+  --sel-linha:#d4e6f8;
+  --visor:#f4f6f9;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",Helvetica,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0f141b;
+    --surface:#18202b;
+    --surface-2:#1f2935;
+    --surface-3:#273341;
+    --line:#2f3d4d;
+    --line-soft:#243040;
+    --text:#e6edf5;
+    --text-dim:#8fa0b4;
+    --text-faint:#64748b;
+    --accent:#49a0f0;
+    --accent-dim:#2a4a69;
+    --good:#3dc88d;
+    --warn:#e0a141;
+    --crit:#e35d61;
+    --conj:#ff8a3d;
+    --sel-linha:#2a4a69;
+    --visor:#0b1016;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0f141b;
+  --surface:#18202b;
+  --surface-2:#1f2935;
+  --surface-3:#273341;
+  --line:#2f3d4d;
+  --line-soft:#243040;
+  --text:#e6edf5;
+  --text-dim:#8fa0b4;
+  --text-faint:#64748b;
+  --accent:#49a0f0;
+  --accent-dim:#2a4a69;
+  --good:#3dc88d;
+  --warn:#e0a141;
+  --crit:#e35d61;
+  --conj:#ff8a3d;
+  --sel-linha:#2a4a69;
+  --visor:#0b1016;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--text);font-family:var(--body);
+  font-size:13px;line-height:1.45;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* ---------- cabeçalho ---------- */
+header{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:9px 16px;background:var(--surface);
+  border-bottom:1px solid var(--line);flex:0 0 auto;
+}
+.brand{display:flex;align-items:baseline;gap:9px;min-width:0}
+.brand h1{
+  font-family:var(--display);font-size:15px;font-weight:700;margin:0;
+  letter-spacing:.02em;text-transform:uppercase;white-space:nowrap;
+}
+.brand .file{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46vw;
+}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;align-items:center}
+.chip{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;
+  padding:3px 7px;border:1px solid var(--line);border-radius:3px;
+  color:var(--text-dim);background:var(--surface-2);white-space:nowrap;
+}
+.btn{
+  background:var(--surface-3);border:1px solid var(--line);border-radius:var(--r);
+  padding:5px 11px;cursor:pointer;font-weight:500;font-size:12px;
+  display:inline-flex;align-items:center;gap:6px;transition:background .12s,border-color .12s;
+}
+.btn:hover{filter:brightness(1.06);border-color:var(--accent)}
+.btn.pri{background:var(--accent-dim);border-color:var(--accent);color:var(--text)}
+.btn.pri:hover{filter:brightness(1.08)}
+
+/* ---------- corpo ---------- */
+.body{flex:1 1 auto;display:flex;min-height:0}
+aside{
+  width:252px;flex:0 0 252px;background:var(--surface);
+  border-right:1px solid var(--line);overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;
+}
+aside.right{border-right:none;border-left:1px solid var(--line);width:296px;flex-basis:296px}
+.sec{border-bottom:1px solid var(--line-soft);padding:12px 14px}
+.sec h2{
+  font-family:var(--display);font-size:10.5px;font-weight:700;margin:0 0 9px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint);
+}
+.stage{flex:1 1 auto;position:relative;min-width:0;background:var(--visor)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+
+/* seletor de coloração */
+.modes{display:flex;flex-direction:column;gap:2px}
+.mode{
+  display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:var(--r);
+  cursor:pointer;border:1px solid transparent;
+}
+.mode:hover{background:var(--surface-2)}
+.mode.on{background:var(--accent-dim);border-color:var(--accent);color:var(--text)}
+.mode input{accent-color:var(--accent);margin:0}
+
+/* legenda */
+.legend{display:flex;flex-direction:column;gap:1px;margin:0 -4px}
+.lrow{
+  display:grid;grid-template-columns:14px 1fr auto auto;align-items:center;gap:8px;
+  padding:4px 5px;border-radius:4px;cursor:pointer;
+}
+.lrow:hover{background:var(--surface-2)}
+.lrow.off{opacity:.33}
+.sw{width:13px;height:13px;border-radius:3px;border:1px solid rgba(128,128,128,.5)}
+.lrow .nm{
+  font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lrow .ct{font-family:var(--mono);font-size:10.5px;color:var(--text-dim);font-variant-numeric:tabular-nums}
+.lrow .iso{
+  font-size:10px;color:var(--text-faint);border:1px solid var(--line);
+  border-radius:3px;padding:1px 4px;visibility:hidden;background:var(--surface-3);
+}
+.lrow:hover .iso{visibility:visible}
+.lrow .iso:hover{color:var(--accent);border-color:var(--accent-dim)}
+
+/* alças de redimensionamento nas bordas do visor */
+.rsz{flex:0 0 6px;background:var(--line-soft);cursor:col-resize;position:relative;transition:background .12s}
+.rsz.h{flex:0 0 6px;width:100%;cursor:row-resize}
+.rsz:hover,.rsz.ativa{background:var(--accent)}
+.rsz::after{
+  content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:2px;height:26px;border-radius:2px;background:var(--line);
+}
+.rsz.h::after{width:26px;height:2px}
+.rsz:hover::after,.rsz.ativa::after{background:var(--surface)}
+
+/* aba para reabrir o painel de propriedades */
+.aba{
+  position:absolute;right:0;top:50%;transform:translateY(-50%);
+  writing-mode:vertical-rl;background:var(--surface);
+  border:1px solid var(--line);border-right:none;border-radius:var(--r) 0 0 var(--r);
+  padding:14px 5px;cursor:pointer;font-family:var(--display);font-size:11px;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);
+  box-shadow:0 1px 4px rgba(0,0,0,.18);
+}
+.aba:hover{color:var(--text);border-color:var(--accent)}
+.aba.tem{color:var(--accent);border-color:var(--accent)}
+.sechead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.sechead h2{margin:0}
+.fechar{
+  background:none;border:none;cursor:pointer;color:var(--text-faint);
+  font-size:17px;line-height:1;padding:0 2px;border-radius:3px;
+}
+.fechar:hover{color:var(--text)}
+
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.row .btn{flex:1 1 auto;justify-content:center;padding:5px 6px;font-size:11.5px}
+label.fld{display:block;font-size:11px;color:var(--text-dim);margin:9px 0 4px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=search],input[type=text]{
+  width:100%;background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r);padding:6px 9px;font-size:12px;
+}
+.swbox{display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer;font-size:12px}
+.swbox input{accent-color:var(--accent);margin:0}
+
+/* painel do elemento */
+.empty{color:var(--text-faint);font-size:12px;padding:4px 0;line-height:1.6}
+.keyparams{display:flex;flex-direction:column;gap:7px;margin-bottom:4px}
+.kp{
+  background:var(--surface-2);border:1px solid var(--line-soft);
+  border-left:3px solid var(--accent);border-radius:4px;padding:7px 9px;
+}
+.kp .k{font-family:var(--display);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}
+.kp .v{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;word-break:break-word}
+.kp .src{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
+.kp.dn{border-left-color:var(--good)}
+.kp.tp{border-left-color:var(--accent)}
+.kp.sys{border-left-color:var(--warn)}
+dl.props{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:11.5px}
+dl.props dt{color:var(--text-dim);white-space:nowrap}
+dl.props dd{margin:0;font-family:var(--mono);font-size:11px;word-break:break-word}
+details.pset{margin-top:8px;border-top:1px solid var(--line-soft);padding-top:7px}
+details.pset summary{
+  cursor:pointer;font-family:var(--display);font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-faint);
+}
+details.pset[open] summary{color:var(--text-dim)}
+details.pset dl{margin-top:6px}
+
+/* gaveta inferior */
+.drawer{
+  flex:0 0 auto;background:var(--surface);border-top:1px solid var(--line);
+  display:flex;flex-direction:column;max-height:46vh;
+}
+.tabs{display:flex;align-items:center;gap:0;border-bottom:1px solid var(--line);padding:0 10px;flex-wrap:wrap}
+.tab{
+  background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;
+  padding:9px 12px;font-family:var(--display);font-size:11.5px;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);
+}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tabs .spacer{flex:1 1 auto}
+.tabs .btn{margin:4px 0 4px 6px}
+.tabwrap{overflow:auto;padding:0;min-height:0;flex:1 1 auto}
+.tabpane{display:none;padding:12px 14px}
+.tabpane.on{display:block}
+.tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.tile{
+  background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--r);
+  padding:9px 13px;min-width:116px;
+}
+.tile .t{font-family:var(--display);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}
+.tile .n{font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile .u{font-size:11px;color:var(--text-dim);font-weight:400}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+th{
+  font-family:var(--display);font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--text-faint);position:sticky;top:0;background:var(--surface);z-index:1;
+  border-bottom:1px solid var(--line);
+}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--surface-2)}
+tbody tr.sel{background:var(--sel-linha)}
+tbody tr.conj{box-shadow:inset 3px 0 0 var(--conj);background:var(--surface-2)}
+.kp.conj{border-left-color:var(--conj)}
+.nav{display:flex;align-items:center;gap:7px;margin-top:9px}
+.nav .btn{flex:1 1 auto;justify-content:center;padding:5px 6px;font-size:11.5px}
+.navct{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+  white-space:nowrap;font-variant-numeric:tabular-nums;min-width:66px;text-align:center;
+}
+tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surface-2)}
+.dnpill{
+  display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 6px;
+  border-radius:9px;border:1px solid var(--line);
+}
+.clickable{cursor:pointer;user-select:none;-webkit-user-select:none}
+.tablehint{font-size:11px;color:var(--text-faint);margin:0 0 9px}
+
+/* overlays do visor */
+.hud{
+  position:absolute;left:12px;bottom:12px;display:flex;gap:7px;flex-wrap:wrap;
+  pointer-events:none;
+}
+.hud .chip{background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.viewbtns{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:5px}
+.viewbtns .btn{background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.18);justify-content:center;min-width:58px;font-size:11px;padding:4px 8px}
+.tip{
+  position:absolute;left:12px;top:12px;font-size:11px;color:var(--text-faint);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:0 1px 4px rgba(0,0,0,.18);
+  padding:6px 9px;max-width:230px;line-height:1.5;
+}
+.tip b{color:var(--text-dim);font-weight:600}
+
+/* carregando */
+.loading{
+  position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;z-index:50;padding:24px;text-align:center;
+}
+.loading h2{font-family:var(--display);font-size:16px;font-weight:600;margin:0;letter-spacing:.03em}
+.bar{width:min(340px,80vw);height:4px;background:var(--surface-3);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0%;background:var(--accent);transition:width .18s}
+.loading p{color:var(--text-dim);font-size:12px;margin:0;font-family:var(--mono)}
+.loading .err{color:var(--crit);max-width:520px;font-family:var(--body);line-height:1.6}
+.hidden{display:none !important}
+
+@media (max-width:1100px){
+  aside{width:216px;flex-basis:216px}
+  aside.right{width:244px;flex-basis:244px}
+}
+@media (max-width:860px){
+  .rsz{display:none}
+  .aba{display:none}
+  body{overflow:auto}
+  .body{flex-direction:column}
+  aside,aside.right{width:auto;flex-basis:auto;max-height:none;border:none;border-bottom:1px solid var(--line)}
+  .stage{height:56vh;min-height:320px;order:-1}
+  .drawer{max-height:none}
+}
+</style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+  <h2>Leitor IFC da Piscina</h2>
+  <div class="bar"><i id="bar"></i></div>
+  <p id="lmsg">Baixando o modelo</p>
+  <p class="err hidden" id="lerr"></p>
+</div>
+
+<header>
+  <div class="brand">
+    <h1>Leitor IFC</h1>
+    <span class="file" id="fileName">—</span>
+  </div>
+  <div class="meta" id="meta"></div>
+  <button class="btn" id="temaBtn" title="Alterna entre claro, escuro e o tema do sistema">Tema: automático</button>
+  <button class="btn pri" id="openBtn">Abrir outro IFC</button>
+  <input type="file" id="fileInput" accept=".ifc" class="hidden">
+</header>
+
+<div class="body">
+  <!-- ============ painel esquerdo ============ -->
+  <aside id="painelEsq">
+    <div class="sec">
+      <h2>Colorir por</h2>
+      <div class="modes" id="modes"></div>
+    </div>
+
+    <div class="sec">
+      <h2 id="legTitle">Legenda</h2>
+      <div class="legend" id="legend"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="showAll">Mostrar tudo</button>
+        <button class="btn" id="invert">Inverter</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>Visor</h2>
+      <label class="swbox"><input type="checkbox" id="zoomClick" checked> Dar zoom na peça ao clicar</label>
+      <label class="swbox"><input type="checkbox" id="focar" checked> Esmaecer o resto ao selecionar</label>
+      <label class="swbox"><input type="checkbox" id="ghost" checked> Mostrar oculto em transparência</label>
+      <label class="swbox"><input type="checkbox" id="grid" checked> Mostrar grade de referência</label>
+      <label class="swbox"><input type="checkbox" id="flat"> Sombreamento plano (mostra as facetas)</label>
+      <label class="fld" for="clip">Corte horizontal — cota <span id="clipV" class="mono"></span></label>
+      <input type="range" id="clip" min="0" max="100" value="100">
+      <div class="row" style="margin-top:9px">
+        <button class="btn" id="isoSel">Isolar seleção</button>
+        <button class="btn" id="hideSel">Ocultar seleção</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="rsz" id="rszEsq" title="Arraste para estreitar ou alargar o visor"></div>
+
+  <!-- ============ visor ============ -->
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="tip">
+      <b>Mover:</b> botão do meio &nbsp; <b>Girar:</b> Shift + botão do meio<br>
+      <b>Zoom:</b> rolar &nbsp; <b>Selecionar:</b> clique esquerdo na peça (dá zoom nela)<br>
+      <b>Somar à seleção:</b> Shift + clique esquerdo<br>
+      Também: arrastar com o esquerdo gira, com o direito move, setas movem
+    </div>
+    <div class="viewbtns">
+      <button class="btn" data-view="iso">Isométrica</button>
+      <button class="btn" data-view="top">Planta</button>
+      <button class="btn" data-view="front">Elevação</button>
+      <button class="btn" data-view="side">Lateral</button>
+      <button class="btn" data-view="fit">Enquadrar</button>
+    </div>
+    <div class="hud" id="hud"></div>
+    <button class="aba" id="abaDir" title="Abrir o painel de propriedades">Propriedades</button>
+  </div>
+
+  <div class="rsz" id="rszDir" title="Arraste para estreitar ou alargar o visor"></div>
+
+  <!-- ============ painel direito ============ -->
+  <aside class="right" id="painelDir">
+    <div class="sec">
+      <div class="sechead">
+        <h2 id="elTitulo">Elemento selecionado</h2>
+        <button class="fechar" id="fecharDir" title="Fechar o painel" aria-label="Fechar o painel">&times;</button>
+      </div>
+      <div id="elPanel">
+        <p class="empty">Clique numa peça no visor, ou numa linha da aba <b>Elementos</b>, para ver diâmetro, tipo de tubo, sistema e todas as propriedades que o IFC carrega.</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="rsz h" id="rszBaixo" title="Arraste para mudar a altura da tabela"></div>
+
+<!-- ============ gaveta de quantitativos ============ -->
+<div class="drawer" id="gaveta">
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-pane="resumo">Resumo</button>
+    <button class="tab" data-pane="sistemas">Tubos por sistema</button>
+    <button class="tab" data-pane="pecas">Peças e dispositivos</button>
+    <button class="tab" data-pane="pecas-sistema">Peças e dispositivos por sistema</button>
+    <button class="tab" data-pane="elementos">Elementos</button>
+    <span class="spacer"></span>
+    <button class="btn" id="copyBtn">Copiar tabela</button>
+  </div>
+  <div class="tabwrap">
+    <div class="tabpane on" id="pane-resumo"></div>
+    <div class="tabpane" id="pane-sistemas"></div>
+    <div class="tabpane" id="pane-pecas"></div>
+    <div class="tabpane" id="pane-pecas-sistema"></div>
+    <div class="tabpane" id="pane-elementos"></div>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script src="ifc-core.js"></script>
+<script src="ifc-build.js"></script>
+<script>
+"use strict";
+
+/* =========================================================
+   1. Paletas
+   ========================================================= */
+// cores por palavra-chave do sistema (convenção usual de piscina)
+const CORES_SISTEMA = [
+  [/quente|aquec|solar|t[ée]rmic/i, '#e8743b'],
+  [/retorno|filtrad|press[aã]o|insufl/i, '#3f8fe0'],
+  [/aspira[cç]/i,                    '#3dc88d'],
+  [/ralo de fundo|fundo/i,           '#2bb3c9'],
+  [/ralo|sucç|succ/i,                '#6fc5d8'],
+  [/esgoto|dren|res[ií]du/i,         '#9a7b55'],
+  [/extravas|overflow|vertedou/i,    '#a97fd4'],
+  [/el[ée]tric|ilumina|energia/i,    '#e3c23f'],
+  [/g[áa]s/i,                        '#e3c23f'],
+  [/[áa]gua fria|fria|potav|pot[áa]vel/i, '#5fd0e8'],
+  [/incend|hidrant|sprink/i,         '#e35d61']
+];
+const PALETA = ['#4da3ff','#3dc88d','#e8a33d','#d472c8','#5fd0e8','#9a7b55',
+  '#a97fd4','#e3c23f','#e8743b','#6fc5d8','#8bbf4a','#e35d61','#7f8fa6','#c8a24d'];
+// rampa por bitola: do menor (claro/frio) ao maior (quente/saturado)
+const RAMPA_DN = ['#9fe6d8','#6fc5d8','#4da3ff','#8bbf4a','#e3c23f','#e8a33d','#e8743b','#e35d61','#c0527f','#a97fd4'];
+const COR_SEM = '#5b6775';
+
+function corSistema(nome, i) {
+  for (const [re, c] of CORES_SISTEMA) if (re.test(nome)) return c;
+  return PALETA[i % PALETA.length];
+}
+function hexRGB(h) {
+  return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+}
+
+/* ---------- cores do visor por tema ---------- */
+const TEMA3D = {
+  dark: {
+    fundo: 0x0b1016, grade: 0x27323f, fade: 0.22, ajusteCor: 1,
+    fantasma: 0x6b7a8c, fantasmaOp: 0.075,
+    foco: 0xfff1a8, conjunto: 0xff8a3d,
+    ceu: 0xdfeaf5, chao: 0x2a3340, ambiente: 1.05, luz1: 0.55, luz2: 0.35
+  },
+  light: {
+    fundo: 0xf4f6f9, grade: 0xc7d0da, fade: 0.28, ajusteCor: 0.8,
+    fantasma: 0x334155, fantasmaOp: 0.09,
+    foco: 0xc2185b, conjunto: 0xd35400,
+    ceu: 0xffffff, chao: 0xb8c4d2, ambiente: 1.15, luz1: 0.45, luz2: 0.3
+  }
+};
+
+function temaEfetivo() {
+  const t = document.documentElement.getAttribute('data-theme');
+  if (t === 'dark' || t === 'light') return t;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+/* =========================================================
+   2. Estado
+   ========================================================= */
+const S = {
+  model: null,
+  modo: 'sistema',
+  grupos: [],              // [{chave, rotulo, cor, n, visivel}]
+  grupoDoEl: [],           // indice do grupo por elemento
+  visivelEl: null,         // Uint8Array
+  sel: -1,
+  conj: null,              // {rotulo, ids, i} — linha de tabela agrupada
+  clipZ: Infinity,
+  ghost: true,
+  zoomClique: true,
+  focar: true,             // esmaece o resto do modelo quando há seleção
+  pane: 'resumo',
+  busca: '',
+  ordem: { col: null, dir: 1 }
+};
+
+const MODOS = [
+  { id: 'sistema',   nome: 'Sistema' },
+  { id: 'diametro',  nome: 'Diâmetro (DN)' },
+  { id: 'tipo',      nome: 'Tipo / família' },
+  { id: 'categoria', nome: 'Categoria IFC' },
+  { id: 'pavimento', nome: 'Pavimento' },
+  { id: 'nativo',    nome: 'Cor original do IFC' }
+];
+
+const $ = s => document.querySelector(s);
+const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
+const fmt = (v, d) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+/* =========================================================
+   3. Carregamento
+   ========================================================= */
+async function descompacta(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Não foi possível baixar o modelo (HTTP ' + res.status + ').');
+  if (typeof DecompressionStream !== 'function')
+    throw new Error('Este navegador não descompacta o modelo embutido. Use o botão "Abrir outro IFC" e escolha o arquivo .ifc do seu computador.');
+  const pacote = await res.json();
+  await progresso(0.015, 'Descompactando o modelo');
+  const bin = atob(pacote.gz);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const fluxo = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return await new Response(fluxo).text();
+}
+
+function progresso(f, msg) {
+  $('#bar').style.width = Math.min(100, Math.round(f * 100)) + '%';
+  if (msg) $('#lmsg').textContent = msg;
+  return new Promise(r => requestAnimationFrame(() => r()));
+}
+
+async function iniciar() {
+  try {
+    await progresso(0.01, 'Baixando o modelo');
+    const texto = await descompacta('modelo.json');
+    await montar(texto);
+  } catch (e) {
+    $('#lerr').classList.remove('hidden');
+    $('#lerr').textContent = e.message || String(e);
+    $('#lmsg').textContent = 'Você ainda pode abrir um arquivo do seu computador:';
+    const b = el('button', 'btn pri', 'Escolher arquivo .ifc');
+    b.onclick = () => $('#fileInput').click();
+    $('#loading').appendChild(b);
+  }
+}
+
+async function montar(texto) {
+  const M = await buildIfcModel(texto, progresso);
+  await progresso(0.97, 'Preparando o visor');
+  S.model = M;
+  S.visivelEl = new Uint8Array(M.elements.length).fill(1);
+  S.sel = -1;
+  construirCena();
+  montarCabecalho();
+  montarModos();
+  aplicarModo(S.modo);
+  aplicarTema3D();
+  const b = M.bbox;
+  S.clipMin = b.min[2] - 0.02; S.clipMax = b.max[2] + 0.02;
+  S.clipZ = S.clipMax;
+  $('#clip').value = 100; atualizaClipLabel();
+  enquadrar(undefined, false);
+  renderTabs();
+  painelElemento();
+  $('#loading').classList.add('hidden');
+}
+
+function montarCabecalho() {
+  const M = S.model;
+  $('#fileName').textContent = M.origem || '(sem nome)';
+  const m = $('#meta'); m.innerHTML = '';
+  const chips = [
+    M.schema,
+    'unidade: ' + M.unidade,
+    M.elements.length + ' elementos',
+    (M.indices.length / 3).toLocaleString('pt-BR') + ' triângulos'
+  ];
+  if (M.dataExport) chips.push('exportado ' + M.dataExport.slice(0, 10).split('-').reverse().join('/'));
+  for (const c of chips) m.appendChild(el('span', 'chip', c));
+}
+
+/* =========================================================
+   4. Cena three.js
+   ========================================================= */
+let renderer, scene, cam, geomSolido, geomFantasma, geomSel, geomConj, geomContexto;
+let meshSolido, meshFantasma, meshSel, meshConj, meshContexto, grade, raycaster;
+let idxSolido, triSolido, idxFantasma, idxContexto, triContexto;
+let nSolido = 0, nFantasma = 0, nContexto = 0;
+let corAttr, corFadeAttr, luzes = {}, precisaRender = true;
+
+function construirCena() {
+  const M = S.model, cv = $('#cv');
+  if (!renderer) {
+    renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
+    renderer.setClearColor(0x0b1016, 1);
+    raycaster = new THREE.Raycaster();
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  if (scene) scene.clear();
+  scene = new THREE.Scene();
+
+  const pos = new THREE.BufferAttribute(M.positions, 3);
+  const cores = new Uint8Array(M.positions.length);
+  corAttr = new THREE.BufferAttribute(cores, 3, true);
+  corFadeAttr = new THREE.BufferAttribute(new Uint8Array(M.positions.length), 3, true);
+
+  // normais a partir de uma geometria temporária com o índice completo
+  const tmp = new THREE.BufferGeometry();
+  tmp.setAttribute('position', pos);
+  tmp.setIndex(new THREE.BufferAttribute(M.indices, 1));
+  tmp.computeVertexNormals();
+  const nrm = tmp.getAttribute('normal');
+
+  idxSolido = new Uint32Array(M.indices.length);
+  idxFantasma = new Uint32Array(M.indices.length);
+  idxContexto = new Uint32Array(M.indices.length);
+  triSolido = new Uint32Array(M.indices.length / 3);
+  triContexto = new Uint32Array(M.indices.length / 3);
+
+  const mk = (indice) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', pos);
+    g.setAttribute('normal', nrm);
+    g.setAttribute('color', corAttr);
+    g.setIndex(new THREE.BufferAttribute(indice, 1));
+    return g;
+  };
+  geomSolido = mk(idxSolido);
+  geomFantasma = mk(idxFantasma);
+  geomSel = mk(new Uint32Array(0));
+  geomConj = mk(new Uint32Array(0));
+  geomContexto = mk(idxContexto);
+  geomContexto.setAttribute('color', corFadeAttr);   // cores já misturadas com o fundo
+
+  const centro = new THREE.Vector3(
+    (M.bbox.min[0] + M.bbox.max[0]) / 2, (M.bbox.min[1] + M.bbox.max[1]) / 2, (M.bbox.min[2] + M.bbox.max[2]) / 2);
+  const raio = Math.hypot(M.bbox.max[0] - M.bbox.min[0], M.bbox.max[1] - M.bbox.min[1], M.bbox.max[2] - M.bbox.min[2]);
+  for (const g of [geomSolido, geomFantasma, geomSel, geomConj, geomContexto]) g.boundingSphere = new THREE.Sphere(centro, raio);
+
+  const matSolido = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const matFantasma = new THREE.MeshBasicMaterial({
+    color: 0x6b7a8c, transparent: true, opacity: 0.075, depthWrite: false, side: THREE.DoubleSide
+  });
+  const matSel = new THREE.MeshBasicMaterial({ color: 0xfff1a8, side: THREE.DoubleSide });
+  const matConj = new THREE.MeshBasicMaterial({ color: 0xff8a3d, side: THREE.DoubleSide });
+  // resto do modelo enquanto há seleção: opaco e escurecido (cor do material multiplica a
+  // cor do vértice). Sem mesclagem não há acúmulo onde os tubos se cruzam, então o
+  // esmaecimento fica igual em toda a cena.
+  const matContexto = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+
+  meshSolido = new THREE.Mesh(geomSolido, matSolido);
+  meshFantasma = new THREE.Mesh(geomFantasma, matFantasma);
+  meshConj = new THREE.Mesh(geomConj, matConj);
+  meshSel = new THREE.Mesh(geomSel, matSel);
+  meshContexto = new THREE.Mesh(geomContexto, matContexto);
+  meshSolido.frustumCulled = meshFantasma.frustumCulled = meshSel.frustumCulled =
+    meshConj.frustumCulled = meshContexto.frustumCulled = false;
+  meshContexto.renderOrder = 1; meshFantasma.renderOrder = 2; meshConj.renderOrder = 3; meshSel.renderOrder = 4;
+  scene.add(meshSolido, meshFantasma, meshContexto, meshConj, meshSel);
+
+  luzes.amb = new THREE.HemisphereLight(0xdfeaf5, 0x2a3340, 1.05);
+  luzes.d1 = new THREE.DirectionalLight(0xffffff, 0.55); luzes.d1.position.set(0.5, -0.8, 1.2);
+  luzes.d2 = new THREE.DirectionalLight(0xbcd4ea, 0.35); luzes.d2.position.set(-0.9, 0.6, 0.4);
+  scene.add(luzes.amb, luzes.d1, luzes.d2);
+
+  // grade no plano XY, na cota mais baixa
+  const ext = Math.max(M.bbox.max[0] - M.bbox.min[0], M.bbox.max[1] - M.bbox.min[1]);
+  const passo = ext > 120 ? 20 : ext > 60 ? 10 : ext > 25 ? 2 : ext > 10 ? 1 : 0.5;
+  const div = Math.max(4, Math.ceil(ext * 1.25 / passo));
+  grade = new THREE.GridHelper(div * passo, div, 0x2b3744, 0x1d2630);
+  grade.material.vertexColors = false;
+  grade.rotateX(Math.PI / 2);
+  grade.position.set(centro.x, centro.y, M.bbox.min[2] - 0.05);
+  scene.add(grade);
+
+  // planos de corte e limites de aproximação proporcionais ao tamanho do modelo
+  LIM.diag = Math.max(1, raio);
+  LIM.min = Math.max(0.02, LIM.diag / 2500);
+  LIM.max = LIM.diag * 6;
+  if (!cam) {
+    cam = new THREE.PerspectiveCamera(45, 1, LIM.min / 2, LIM.diag * 15);
+    cam.up.set(0, 0, 1);
+    instalarControles(cv);
+  } else {
+    cam.near = LIM.min / 2; cam.far = LIM.diag * 15; cam.updateProjectionMatrix();
+  }
+  redimensionar();
+}
+
+/* ---------- controles de órbita próprios (sem dependência externa) ---------- */
+const orb = { alvo: new THREE.Vector3(), r: 20, teta: -0.9, fi: 1.05 };
+const LIM = { min: 0.02, max: 3000, diag: 30 };
+const limitarR = (v) => Math.max(LIM.min, Math.min(LIM.max, v));
+
+/* Ponto sob o cursor, para o zoom aproximar do que está debaixo do mouse.
+   Testa a caixa envolvente de cada peça — 722 testes, barato o bastante para
+   rodar a cada giro da roda (um raycast contra os 507 mil triângulos levaria ~47 ms). */
+function pontoSobCursor(ev) {
+  const cv = $('#cv'), b = cv.getBoundingClientRect();
+  const m = new THREE.Vector2(
+    ((ev.clientX - b.left) / b.width) * 2 - 1,
+    -((ev.clientY - b.top) / b.height) * 2 + 1);
+  raycaster.setFromCamera(m, cam);
+  const o = raycaster.ray.origin, d = raycaster.ray.direction;
+  let melhor = Infinity;
+  const els = S.model ? S.model.elements : [];
+  for (let i = 0; i < els.length; i++) {
+    const e = els[i];
+    if (!e.min || !elementoVisivel(i)) continue;
+    // método das fatias: interseção de raio com caixa alinhada aos eixos
+    let t0 = 0, t1 = Infinity, ok = true;
+    for (let k = 0; k < 3; k++) {
+      const inv = 1 / (d.getComponent(k) || 1e-12);
+      let a = (e.min[k] - o.getComponent(k)) * inv;
+      let c = (e.max[k] - o.getComponent(k)) * inv;
+      if (a > c) { const tmp = a; a = c; c = tmp; }
+      if (a > t0) t0 = a;
+      if (c < t1) t1 = c;
+      if (t0 > t1) { ok = false; break; }
+    }
+    if (ok && t0 > 0 && t0 < melhor) melhor = t0;
+  }
+  if (melhor < Infinity) return raycaster.ray.at(melhor, new THREE.Vector3());
+  // nada sob o cursor: usa o plano que passa pelo ponto de órbita
+  const plano = new THREE.Plane().setFromNormalAndCoplanarPoint(
+    cam.getWorldDirection(new THREE.Vector3()), orb.alvo);
+  const q = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plano, q) ? q : orb.alvo.clone();
+}
+
+/* Aproxima mantendo fixo o ponto sob o cursor: escala câmera e pivô em torno dele. */
+function aproximar(ev, fatorBruto) {
+  const rNovo = limitarR(orb.r * fatorBruto);
+  const f = rNovo / orb.r;
+  if (f === 1) return;
+  const P = pontoSobCursor(ev);
+  orb.alvo.sub(P).multiplyScalar(f).add(P);
+  orb.r = rNovo;
+  posicionarCamera();
+}
+
+function posicionarCamera() {
+  const sf = Math.sin(orb.fi), cf = Math.cos(orb.fi);
+  cam.position.set(
+    orb.alvo.x + orb.r * sf * Math.cos(orb.teta),
+    orb.alvo.y + orb.r * sf * Math.sin(orb.teta),
+    orb.alvo.z + orb.r * cf);
+  cam.lookAt(orb.alvo);
+  // Os planos de corte acompanham a distância. Fixo em 1 cm, o plano próximo
+  // gastaria quase toda a precisão de profundidade e os tubos brigariam entre si
+  // quando a vista estivesse afastada.
+  const perto = Math.max(LIM.min / 2, orb.r / 1000);
+  const longe = orb.r + LIM.diag * 3;
+  if (cam.near !== perto || cam.far !== longe) {
+    cam.near = perto; cam.far = longe; cam.updateProjectionMatrix();
+  }
+  precisaRender = true;
+}
+
+function instalarControles(cv) {
+  let arrastando = 0, px = 0, py = 0, movido = 0, botaoAtivo = -1;
+  const EPS = 1e-4;
+
+  const pan = (dx, dy) => {
+    const esc = orb.r * 0.0016;
+    const dir = new THREE.Vector3().subVectors(orb.alvo, cam.position).normalize();
+    const dirColuna = new THREE.Vector3().crossVectors(dir, cam.up).normalize();
+    const cima = new THREE.Vector3().crossVectors(dirColuna, dir).normalize();
+    orb.alvo.addScaledVector(dirColuna, dx * esc).addScaledVector(cima, dy * esc);
+  };
+
+  // 1 = girar (giroscópio), 2 = deslocar
+  // botão do meio sozinho desloca; com Shift, gira — como no Revit
+  // botão esquerdo sozinho gira; com Shift, desloca; botão direito desloca
+  function modoDoBotao(e) {
+    if (e.button === 1) return e.shiftKey ? 1 : 2;
+    if (e.button === 0) return e.shiftKey ? 2 : 1;
+    return 2;
+  }
+
+  cv.addEventListener('pointerdown', e => {
+    if (e.button === 1) e.preventDefault();      // corta a rolagem automática do navegador
+    cv.setPointerCapture(e.pointerId);
+    pararAnimacao();
+    botaoAtivo = e.button;
+    arrastando = modoDoBotao(e);
+    px = e.clientX; py = e.clientY; movido = 0;
+  });
+  // o Chrome só desiste da rolagem automática se o mousedown do meio for barrado
+  cv.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+  cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
+  cv.addEventListener('pointermove', e => {
+    if (!arrastando) return;
+    const dx = e.clientX - px, dy = e.clientY - py;
+    px = e.clientX; py = e.clientY; movido += Math.abs(dx) + Math.abs(dy);
+    if (arrastando === 1) {
+      orb.teta -= dx * 0.006;
+      orb.fi = Math.max(EPS, Math.min(Math.PI - EPS, orb.fi - dy * 0.006));
+    } else pan(-dx, dy);
+    posicionarCamera();
+  });
+  cv.addEventListener('pointerup', e => {
+    // só o botão esquerdo seleciona; girar com o do meio não muda a seleção.
+    // com Shift o arraste é deslocamento, mas o clique parado soma à seleção
+    const clique = botaoAtivo === 0 && movido < 5;
+    if (clique && (arrastando === 1 || e.shiftKey || e.ctrlKey || e.metaKey)) selecionarPorClique(e);
+    arrastando = 0; botaoAtivo = -1;
+  });
+  cv.addEventListener('pointercancel', () => { arrastando = 0; botaoAtivo = -1; });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('wheel', e => {
+    e.preventDefault(); pararAnimacao();
+    aproximar(e, Math.exp(e.deltaY * 0.0012));
+  }, { passive: false });
+
+  // toque: 2 dedos = zoom + deslocar
+  let dist0 = 0, mid0 = null;
+  cv.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      dist0 = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      mid0 = [(e.touches[0].clientX + e.touches[1].clientX) / 2, (e.touches[0].clientY + e.touches[1].clientY) / 2];
+      arrastando = 0; pararAnimacao();
+    }
+  }, { passive: true });
+  cv.addEventListener('touchmove', e => {
+    if (e.touches.length !== 2 || !mid0) return;
+    e.preventDefault();
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const mid = [(e.touches[0].clientX + e.touches[1].clientX) / 2, (e.touches[0].clientY + e.touches[1].clientY) / 2];
+    if (dist0 > 0) aproximar({ clientX: mid[0], clientY: mid[1] }, dist0 / d);
+    pan(-(mid[0] - mid0[0]), mid[1] - mid0[1]);
+    dist0 = d; mid0 = mid;
+    posicionarCamera();
+  }, { passive: false });
+  cv.addEventListener('touchend', () => { mid0 = null; }, { passive: true });
+
+  addEventListener('keydown', e => {
+    const alvo = e.target;
+    if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'SELECT')) return;
+    const passo = 22;
+    if (e.key === 'ArrowLeft') pan(passo, 0);
+    else if (e.key === 'ArrowRight') pan(-passo, 0);
+    else if (e.key === 'ArrowUp') pan(0, -passo);
+    else if (e.key === 'ArrowDown') pan(0, passo);
+    else if (e.key === 'Escape') { limparSelecao(); return; }
+    else if (S.conj && (e.key === 'n' || e.key === 'N')) { passoConjunto(1); return; }
+    else if (S.conj && (e.key === 'p' || e.key === 'P')) { passoConjunto(-1); return; }
+    else return;
+    e.preventDefault(); posicionarCamera();
+  });
+}
+
+function redimensionar() {
+  const st = $('#stage');
+  const w = st.clientWidth, h = st.clientHeight;
+  if (!w || !h || !renderer) return;
+  renderer.setSize(w, h, false);
+  cam.aspect = w / h; cam.updateProjectionMatrix();
+  precisaRender = true;
+}
+addEventListener('resize', redimensionar);
+
+function enquadrar(alvoIdx, animado) {
+  const M = S.model;
+  let mn, mx;
+  const lista = Array.isArray(alvoIdx) ? alvoIdx : (alvoIdx != null && alvoIdx >= 0 ? [alvoIdx] : null);
+  if (lista && lista.length) {
+    mn = [Infinity, Infinity, Infinity]; mx = [-Infinity, -Infinity, -Infinity];
+    for (const idx of lista) {
+      const e = M.elements[idx];
+      if (!e || !e.min) continue;
+      for (let k = 0; k < 3; k++) {
+        if (e.min[k] < mn[k]) mn[k] = e.min[k];
+        if (e.max[k] > mx[k]) mx[k] = e.max[k];
+      }
+    }
+    if (!isFinite(mn[0])) { mn = M.bbox.min; mx = M.bbox.max; }
+    else {
+      // folga ao redor da peça: um joelho de 10 cm precisa ver o tubo que chega nele
+      const maior = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]);
+      // 30% de folga ao redor, sem ultrapassar uma fração do próprio modelo
+      const diag = Math.hypot(M.bbox.max[0] - M.bbox.min[0], M.bbox.max[1] - M.bbox.min[1], M.bbox.max[2] - M.bbox.min[2]);
+      const folga = Math.min(Math.max(0.1, maior * 0.3), diag * 0.06);
+      mn = mn.map(v => v - folga); mx = mx.map(v => v + folga);
+    }
+  } else { mn = M.bbox.min; mx = M.bbox.max; }
+  const alvo = new THREE.Vector3((mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2);
+  const meio = [(mx[0] - mn[0]) / 2, (mx[1] - mn[1]) / 2, (mx[2] - mn[2]) / 2];
+  // eixos da câmera na orientação atual
+  const sf = Math.sin(orb.fi), cf = Math.cos(orb.fi);
+  const frente = new THREE.Vector3(-sf * Math.cos(orb.teta), -sf * Math.sin(orb.teta), -cf).normalize();
+  const dir = new THREE.Vector3().crossVectors(frente, cam.up).normalize();
+  const cima = new THREE.Vector3().crossVectors(dir, frente).normalize();
+  const extensao = (v) => Math.abs(meio[0] * v.x) + Math.abs(meio[1] * v.y) + Math.abs(meio[2] * v.z);
+  const tgV = Math.tan(cam.fov * Math.PI / 360);
+  const tgH = tgV * Math.max(0.3, cam.aspect || 1);
+  const r = Math.max(extensao(cima) / tgV, extensao(dir) / tgH) * 1.12 + extensao(frente);
+  irPara(alvo, limitarR(r), animado);
+}
+
+/* ---------- deslocamento suave da câmera ---------- */
+let animCam = null;
+const movimentoReduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function pararAnimacao() { animCam = null; }
+
+function irPara(alvo, r, animado) {
+  if (!animado || movimentoReduzido()) {
+    animCam = null;
+    orb.alvo.copy(alvo); orb.r = r; posicionarCamera();
+    return;
+  }
+  animCam = { a0: orb.alvo.clone(), a1: alvo.clone(), r0: orb.r, r1: r, t0: performance.now(), ms: 430 };
+  requestAnimationFrame(passoAnimacao);
+}
+
+function passoAnimacao() {
+  if (!animCam) return;
+  const t = Math.min(1, (performance.now() - animCam.t0) / animCam.ms);
+  const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  orb.alvo.lerpVectors(animCam.a0, animCam.a1, e);
+  orb.r = animCam.r0 + (animCam.r1 - animCam.r0) * e;
+  posicionarCamera();
+  if (t < 1) requestAnimationFrame(passoAnimacao); else animCam = null;
+}
+
+function vista(v) {
+  pararAnimacao();
+  if (v === 'fit') { enquadrar(S.sel >= 0 ? S.sel : undefined, true); return; }
+  if (v === 'top') { orb.teta = -Math.PI / 2; orb.fi = 0.02; }
+  else if (v === 'front') { orb.teta = -Math.PI / 2; orb.fi = Math.PI / 2; }
+  else if (v === 'side') { orb.teta = 0; orb.fi = Math.PI / 2; }
+  else { orb.teta = -0.9; orb.fi = 1.05; }
+  enquadrar(undefined, true);
+}
+
+function laco() {
+  requestAnimationFrame(laco);
+  if (!renderer || !scene || !precisaRender) return;
+  precisaRender = false;
+
+  const foco = meshContexto && meshContexto.visible;
+  if (!foco) { renderer.autoClear = true; renderer.render(scene, cam); return; }
+
+  // 1º passo: o modelo esmaecido, com profundidade própria
+  const v = {
+    sol: meshSolido.visible, conj: meshConj.visible, sel: meshSel.visible,
+    fan: meshFantasma.visible, gr: grade ? grade.visible : false
+  };
+  renderer.autoClear = false;
+  renderer.clear();
+  meshSolido.visible = false; meshConj.visible = false; meshSel.visible = false;
+  renderer.render(scene, cam);
+
+  // 2º passo: zera a profundidade para a seleção aparecer mesmo atrás de outros tubos
+  renderer.clearDepth();
+  meshContexto.visible = false; meshFantasma.visible = false; if (grade) grade.visible = false;
+  meshSolido.visible = v.sol; meshConj.visible = v.conj; meshSel.visible = v.sel;
+  renderer.render(scene, cam);
+
+  meshContexto.visible = true; meshFantasma.visible = v.fan; if (grade) grade.visible = v.gr;
+  renderer.autoClear = true;
+}
+laco();
+
+function aplicarTema3D() {
+  if (!renderer) return;
+  const t = TEMA3D[temaEfetivo()];
+  renderer.setClearColor(t.fundo, 1);
+  if (grade) { grade.material.color.setHex(t.grade); grade.material.needsUpdate = true; }
+  if (meshFantasma) { meshFantasma.material.color.setHex(t.fantasma); meshFantasma.material.opacity = t.fantasmaOp; }
+  if (meshSel) meshSel.material.color.setHex(t.foco);
+  if (meshConj) meshConj.material.color.setHex(t.conjunto);
+  if (luzes.amb) { luzes.amb.color.setHex(t.ceu); luzes.amb.groundColor.setHex(t.chao); luzes.amb.intensity = t.ambiente; }
+  if (luzes.d1) luzes.d1.intensity = t.luz1;
+  if (luzes.d2) luzes.d2.intensity = t.luz2;
+  if (S.model) pintar();
+  precisaRender = true;
+}
+
+/* =========================================================
+   5. Coloração e visibilidade
+   ========================================================= */
+function chaveGrupo(e, modo) {
+  switch (modo) {
+    case 'sistema':   return e.sistemaClasse;
+    case 'diametro':  return e.dn ? 'DN ' + e.dn : 'sem diâmetro';
+    case 'tipo':      return e.objType || '(sem tipo)';
+    case 'categoria': return e.categoria;
+    case 'pavimento': return e.pavimento;
+    case 'nativo':    return e.corNativa ? 'cor do IFC' : 'sem cor no IFC';
+  }
+  return '';
+}
+
+function aplicarModo(modo) {
+  S.modo = modo;
+  const M = S.model, els = M.elements;
+  const mapa = new Map();
+  S.grupoDoEl = new Array(els.length);
+
+  for (let i = 0; i < els.length; i++) {
+    const k = chaveGrupo(els[i], modo);
+    let gi = mapa.get(k);
+    if (gi === undefined) { gi = mapa.size; mapa.set(k, gi); }
+    S.grupoDoEl[i] = gi;
+  }
+
+  const chaves = [...mapa.keys()];
+  // ordenação sensata por modo
+  let ordem = chaves.map((c, i) => i);
+  if (modo === 'diametro') {
+    ordem.sort((a, b) => {
+      const na = parseInt((chaves[a].match(/\d+/) || [1e9])[0]), nb = parseInt((chaves[b].match(/\d+/) || [1e9])[0]);
+      return na - nb;
+    });
+  } else {
+    ordem.sort((a, b) => chaves[a].localeCompare(chaves[b], 'pt-BR'));
+  }
+
+  const antigos = new Map(S.grupos.map(g => [g.chave, g.visivel]));
+  const nova = new Array(chaves.length);
+  const grupos = [];
+  ordem.forEach((velho, novo) => {
+    nova[velho] = novo;
+    const chave = chaves[velho];
+    grupos.push({ chave, cor: '#888', n: 0, m: 0, visivel: antigos.has(chave) ? antigos.get(chave) : true });
+  });
+  S.grupoDoEl = S.grupoDoEl.map(g => nova[g]);
+
+  for (let i = 0; i < els.length; i++) {
+    const g = grupos[S.grupoDoEl[i]];
+    g.n++; g.m += els[i].comprimento || 0;
+  }
+
+  // cores
+  const nSemCor = /sem (diâmetro|tipo|sistema|cor)|\(sem/i;
+  let j = 0;
+  grupos.forEach((g, i) => {
+    if (nSemCor.test(g.chave)) { g.cor = COR_SEM; return; }
+    if (modo === 'sistema') g.cor = corSistema(g.chave, j++);
+    else if (modo === 'diametro') g.cor = RAMPA_DN[Math.min(RAMPA_DN.length - 1, j++)];
+    else g.cor = PALETA[(j++) % PALETA.length];
+  });
+  S.grupos = grupos;
+
+  pintar();
+  atualizarVisibilidade();
+  renderLegenda();
+}
+
+function pintar() {
+  const M = S.model, els = M.elements, cores = corAttr.array, fade = corFadeAttr.array;
+  const t = TEMA3D[temaEfetivo()];
+  const bg = [(t.fundo >> 16) & 255, (t.fundo >> 8) & 255, t.fundo & 255];
+  const k = t.fade, aj = t.ajusteCor;
+  const rgbCache = S.grupos.map(g => hexRGB(g.cor));
+  for (let i = 0; i < els.length; i++) {
+    const e = els[i];
+    let rgb;
+    if (S.modo === 'nativo' && e.corNativa) {
+      rgb = [Math.round(e.corNativa.r * 255), Math.round(e.corNativa.g * 255), Math.round(e.corNativa.b * 255)];
+    } else rgb = rgbCache[S.grupoDoEl[i]];
+    // no tema claro as cores são aprofundadas para não lavarem no fundo branco
+    const c0 = Math.round(rgb[0] * aj), c1 = Math.round(rgb[1] * aj), c2 = Math.round(rgb[2] * aj);
+    // versão esmaecida: mistura com o fundo do visor, igual nos dois temas
+    const f0 = Math.round(c0 * k + bg[0] * (1 - k));
+    const f1 = Math.round(c1 * k + bg[1] * (1 - k));
+    const f2 = Math.round(c2 * k + bg[2] * (1 - k));
+    const fim = (e.vStart + e.vCount) * 3;
+    for (let p = e.vStart * 3; p < fim; p += 3) {
+      cores[p] = c0; cores[p + 1] = c1; cores[p + 2] = c2;
+      fade[p] = f0; fade[p + 1] = f1; fade[p + 2] = f2;
+    }
+  }
+  corAttr.needsUpdate = true;
+  corFadeAttr.needsUpdate = true;
+  precisaRender = true;
+}
+
+function elementoVisivel(i) {
+  if (!S.visivelEl[i]) return false;
+  if (!S.grupos[S.grupoDoEl[i]].visivel) return false;
+  const e = S.model.elements[i];
+  if (S.clipZ < Infinity && e.vCount) {
+    // mantém a peça se o ponto mais baixo estiver abaixo do corte
+    if (e.min && e.min[2] > S.clipZ) return false;
+  }
+  return true;
+}
+
+// conjunto de peças em destaque no momento (seleção única ou linha de tabela)
+function idsDestacados() {
+  if (S.conj && S.conj.ids.length) {
+    const m = new Set(S.conj.ids);
+    if (S.sel >= 0) m.add(S.sel);
+    return m;
+  }
+  if (S.sel >= 0) return new Set([S.sel]);
+  return null;
+}
+
+function atualizarVisibilidade() {
+  const M = S.model, els = M.elements, src = M.indices;
+  const destaque = S.focar ? idsDestacados() : null;
+  nSolido = 0; nFantasma = 0; nContexto = 0;
+  let t = 0, tc = 0;
+  for (let i = 0; i < els.length; i++) {
+    const e = els[i];
+    if (!e.iCount) continue;
+    if (elementoVisivel(i)) {
+      // com uma seleção ativa, o resto do modelo vai para a malha esmaecida
+      if (destaque && !destaque.has(i)) {
+        for (let k = 0; k < e.iCount; k++) idxContexto[nContexto + k] = src[e.iStart + k];
+        for (let k = 0; k < e.iCount / 3; k++) triContexto[tc + k] = i;
+        nContexto += e.iCount; tc += e.iCount / 3;
+      } else {
+        for (let k = 0; k < e.iCount; k++) idxSolido[nSolido + k] = src[e.iStart + k];
+        for (let k = 0; k < e.iCount / 3; k++) triSolido[t + k] = i;
+        nSolido += e.iCount; t += e.iCount / 3;
+      }
+    } else if (S.ghost) {
+      for (let k = 0; k < e.iCount; k++) idxFantasma[nFantasma + k] = src[e.iStart + k];
+      nFantasma += e.iCount;
+    }
+  }
+  geomSolido.index.needsUpdate = true;
+  geomFantasma.index.needsUpdate = true;
+  geomContexto.index.needsUpdate = true;
+  geomSolido.setDrawRange(0, nSolido);
+  geomFantasma.setDrawRange(0, nFantasma);
+  geomContexto.setDrawRange(0, nContexto);
+  meshFantasma.visible = S.ghost && nFantasma > 0;
+  meshContexto.visible = nContexto > 0;
+  atualizarSelecao();
+  atualizarHud();
+  precisaRender = true;
+}
+
+// toda mudança de seleção refaz a divisão entre destaque e contexto
+function atualizarDestaque() { atualizarVisibilidade(); }
+
+function pintarMalha(geom, mesh, ids) {
+  const M = S.model;
+  const usados = (ids || []).filter(i => M.elements[i] && M.elements[i].iCount && elementoVisivel(i));
+  if (!usados.length) { mesh.visible = false; precisaRender = true; return; }
+  let total = 0;
+  for (const i of usados) total += M.elements[i].iCount;
+  const arr = new Uint32Array(total);
+  let o = 0;
+  for (const i of usados) {
+    const e = M.elements[i];
+    for (let k = 0; k < e.iCount; k++) arr[o + k] = M.indices[e.iStart + k];
+    o += e.iCount;
+  }
+  geom.setIndex(new THREE.BufferAttribute(arr, 1));
+  geom.setDrawRange(0, total);
+  mesh.visible = true;
+  precisaRender = true;
+}
+
+function atualizarSelecao() {
+  pintarMalha(geomSel, meshSel, S.sel >= 0 ? [S.sel] : []);
+  pintarMalha(geomConj, meshConj, S.conj ? S.conj.ids : []);
+}
+
+function atualizarHud() {
+  const hud = $('#hud'); hud.innerHTML = '';
+  const vis = S.model.elements.reduce((s, _, i) => s + (elementoVisivel(i) ? 1 : 0), 0);
+  const q = quantitativos(S.model, (e) => elementoVisivel(e.i));
+  hud.appendChild(el('span', 'chip', vis + ' de ' + S.model.elements.length + ' elementos à vista'));
+  hud.appendChild(el('span', 'chip', fmt(q.totalM, 2) + ' m de tubo visível'));
+  if (S.conj) hud.appendChild(el('span', 'chip', S.conj.ids.length + ' peças selecionadas'));
+  if (S.sel >= 0) {
+    const e = S.model.elements[S.sel];
+    hud.appendChild(el('span', 'chip', 'em foco: ' + (e.tipo || e.categoria) + (e.dn ? ' · DN ' + e.dn : '')));
+  }
+}
+
+/* =========================================================
+   6. Seleção
+   ========================================================= */
+function selecionarPorClique(ev) {
+  const r = $('#cv').getBoundingClientRect();
+  const m = new THREE.Vector2(
+    ((ev.clientX - r.left) / r.width) * 2 - 1,
+    -((ev.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(m, cam);
+  const alvos = [meshSolido];
+  if (meshContexto.visible) alvos.push(meshContexto);
+  const hits = raycaster.intersectObjects(alvos, false);
+
+  let alvo = -1;
+  if (hits.length) {
+    const h = hits[0], f = h.faceIndex;
+    const doContexto = h.object === meshContexto;
+    const mapa = doContexto ? triContexto : triSolido;
+    const limite = (doContexto ? nContexto : nSolido) / 3;
+    if (f != null && f < limite) alvo = mapa[f];
+  }
+
+  if (somando(ev)) {
+    // somar não dá zoom nem limpa a seleção quando o clique cai no vazio
+    if (alvo >= 0) alternarNaSelecao([alvo]);
+    return;
+  }
+
+  S.sel = alvo;
+  if (S.sel < 0) S.conj = null;
+  else if (S.conj && S.conj.ids.indexOf(S.sel) < 0) S.conj = null;
+  else if (S.conj) S.conj.i = S.conj.ids.indexOf(S.sel);
+  painelElemento(); atualizarDestaque(); marcarLinha();
+  if (S.sel >= 0 && S.zoomClique) enquadrar(S.sel, true);
+}
+
+const somando = (ev) => !!(ev && (ev.shiftKey || ev.ctrlKey || ev.metaKey));
+
+function selecionar(i, enquadra) {
+  S.sel = i; S.conj = null;
+  painelElemento(); atualizarDestaque(); marcarLinha();
+  if (enquadra) enquadrar(i, true);
+}
+
+function selecionarConjunto(rotulo, ids, chave) {
+  const visiveis = ids.filter(i => elementoVisivel(i));
+  const usar = visiveis.length ? visiveis : ids;
+  S.conj = { rotulo, ids: usar, i: -1, chave };
+  S.sel = -1;
+  painelElemento(); atualizarDestaque(); marcarLinha();
+  enquadrar(usar, true);
+}
+
+function passoConjunto(d) {
+  if (!S.conj || !S.conj.ids.length) return;
+  const n = S.conj.ids.length;
+  S.conj.i = (S.conj.i + d + n * 2) % n;
+  S.sel = S.conj.ids[S.conj.i];
+  painelElemento(); atualizarDestaque(); marcarLinha();
+  enquadrar(S.sel, true);
+}
+
+// Shift (ou Ctrl/Cmd) soma à seleção; repetir no mesmo item tira ele de volta.
+function alternarNaSelecao(ids) {
+  const atual = new Set(S.conj ? S.conj.ids : (S.sel >= 0 ? [S.sel] : []));
+  const validos = ids.filter(i => i >= 0 && S.model.elements[i]);
+  if (!validos.length) return;
+  const jaTodos = validos.every(i => atual.has(i));
+  for (const i of validos) { if (jaTodos) atual.delete(i); else atual.add(i); }
+  const lista = [...atual];
+  if (!lista.length) { limparSelecao(); return; }
+  S.conj = { rotulo: 'Seleção manual', ids: lista, i: -1, chave: null };
+  S.sel = jaTodos ? -1 : validos[validos.length - 1];
+  if (S.sel >= 0) S.conj.i = lista.indexOf(S.sel);
+  painelElemento(); atualizarDestaque(); marcarLinha();
+}
+
+function limparSelecao() {
+  S.sel = -1; S.conj = null;
+  painelElemento(); atualizarDestaque(); marcarLinha();
+}
+
+/* =========================================================
+   7. Painéis
+   ========================================================= */
+function montarModos() {
+  const c = $('#modes'); c.innerHTML = '';
+  for (const m of MODOS) {
+    const lab = el('label', 'mode' + (m.id === S.modo ? ' on' : ''));
+    const r = el('input'); r.type = 'radio'; r.name = 'modo'; r.value = m.id; r.checked = m.id === S.modo;
+    r.onchange = () => { aplicarModo(m.id); montarModos(); renderTabs(); };
+    lab.appendChild(r); lab.appendChild(el('span', null, m.nome));
+    c.appendChild(lab);
+  }
+}
+
+function prefixoComum(nomes) {
+  const uteis = nomes.filter(n => !/\(sem |^sem /i.test(n));
+  if (uteis.length < 3) return '';
+  const minimo = Math.ceil(uteis.length * 0.6);
+  const SEP = /[\s\-\u2013\u2014:|\/]/;
+  for (const base of uteis.slice(0, 3)) {
+    const cortes = [];
+    for (let i = 1; i < Math.min(base.length, 42); i++)
+      if (SEP.test(base[i - 1]) && !SEP.test(base[i])) cortes.push(i);
+    for (const i of cortes.reverse()) {
+      const pre = base.slice(0, i);
+      if (pre.trim().length < 3) continue;
+      if (uteis.filter(n => n.startsWith(pre)).length >= minimo) return pre;
+    }
+  }
+  return '';
+}
+
+function renderLegenda() {
+  const c = $('#legend'); c.innerHTML = '';
+  const titulo = { sistema: 'Sistemas', diametro: 'Diâmetros', tipo: 'Tipos e famílias', categoria: 'Categorias', pavimento: 'Pavimentos', nativo: 'Cor do IFC' };
+  const pre = (S.modo === 'sistema' || S.modo === 'tipo') ? prefixoComum(S.grupos.map(g => g.chave)) : '';
+  $('#legTitle').textContent = titulo[S.modo] + ' (' + S.grupos.length + ')' + (pre ? ' · ' + pre.trim() : '');
+  S.grupos.forEach((g, i) => {
+    const row = el('div', 'lrow' + (g.visivel ? '' : ' off'));
+    row.title = g.chave + ' — ' + g.n + ' elementos' + (g.m > 0.01 ? ', ' + fmt(g.m, 2) + ' m' : '');
+    const sw = el('span', 'sw'); sw.style.background = g.cor; row.appendChild(sw);
+    row.appendChild(el('span', 'nm', pre && g.chave.startsWith(pre) ? g.chave.slice(pre.length) : g.chave));
+    row.appendChild(el('span', 'ct', String(g.n)));
+    const iso = el('button', 'iso', 'só este');
+    iso.onclick = (e) => {
+      e.stopPropagation();
+      S.grupos.forEach((x, j) => x.visivel = j === i);
+      S.visivelEl.fill(1);
+      atualizarVisibilidade(); renderLegenda(); renderTabs();
+    };
+    row.appendChild(iso);
+    row.onclick = () => { g.visivel = !g.visivel; atualizarVisibilidade(); renderLegenda(); renderTabs(); };
+    c.appendChild(row);
+  });
+}
+
+function painelConjunto(p) {
+  const M = S.model, c = S.conj;
+  p.innerHTML = '';
+
+  const cab = el('div', 'kp conj');
+  cab.appendChild(el('div', 'v', c.rotulo));
+  const metros = c.ids.reduce((t, i) => t + (ehLinear(M.elements[i]) ? M.elements[i].comprimento : 0), 0);
+  cab.appendChild(el('div', 'src', c.ids.length + ' peças destacadas em laranja' + (metros > 0.01 ? ' · ' + fmt(metros, 2) + ' m' : '')));
+  p.appendChild(cab);
+
+  const nav = el('div', 'nav');
+  const ant = el('button', 'btn', '‹ Anterior'); ant.onclick = () => passoConjunto(-1);
+  const prox = el('button', 'btn', 'Próxima ›'); prox.onclick = () => passoConjunto(1);
+  const cont = el('span', 'navct', c.i < 0 ? 'peça a peça' : (c.i + 1) + ' de ' + c.ids.length);
+  nav.appendChild(ant); nav.appendChild(cont); nav.appendChild(prox);
+  p.appendChild(nav);
+
+  const acoes = el('div', 'row'); acoes.style.marginTop = '8px';
+  const bEnq = el('button', 'btn', 'Enquadrar conjunto');
+  bEnq.onclick = () => { S.sel = -1; S.conj.i = -1; painelElemento(); atualizarDestaque(); marcarLinha(); enquadrar(c.ids, true); };
+  const bIso = el('button', 'btn', 'Isolar conjunto');
+  bIso.onclick = () => {
+    S.visivelEl.fill(0);
+    for (const i of c.ids) S.visivelEl[i] = 1;
+    S.grupos.forEach(g => g.visivel = true);
+    atualizarVisibilidade(); renderLegenda(); renderTabs(); enquadrar(c.ids, true);
+  };
+  const bLimpa = el('button', 'btn', 'Limpar');
+  bLimpa.onclick = () => limparSelecao();
+  acoes.appendChild(bEnq); acoes.appendChild(bIso); acoes.appendChild(bLimpa);
+  p.appendChild(acoes);
+
+  // sistemas em que esse conjunto aparece
+  const porSis = new Map();
+  for (const i of c.ids) { const k = M.elements[i].sistemaClasse; porSis.set(k, (porSis.get(k) || 0) + 1); }
+  if (porSis.size) {
+    const dl = el('dl', 'props');
+    dl.style.marginTop = '10px';
+    [...porSis].sort((a, b) => b[1] - a[1]).forEach(([k, n]) => linhaProp(dl, k, n + (n > 1 ? ' peças' : ' peça')));
+    const t = el('div');
+    t.style.cssText = 'font-family:var(--display);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint);margin-top:10px';
+    t.textContent = 'Onde estão';
+    p.appendChild(t); p.appendChild(dl);
+  }
+
+  if (S.sel >= 0) {
+    const sep = el('div');
+    sep.style.cssText = 'border-top:1px solid var(--line-soft);margin-top:12px;padding-top:9px;font-family:var(--display);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-faint)';
+    sep.textContent = 'Peça em foco';
+    p.appendChild(sep);
+    const sub = el('div');
+    p.appendChild(sub);
+    detalheElemento(sub, M.elements[S.sel], true);
+  }
+
+  const dica = el('p', 'empty');
+  dica.style.marginTop = '10px';
+  dica.innerHTML = '<b>Shift+clique</b> soma peças à seleção; repetir no mesmo item tira ele. ' +
+    'Teclas <b>N</b> e <b>P</b> avançam e voltam. <b>Esc</b> limpa.';
+  p.appendChild(dica);
+}
+
+function painelModelo(p) {
+  const M = S.model;
+  p.innerHTML = '';
+  p.appendChild(Object.assign(el('p', 'empty'), {
+    innerHTML: 'Clique numa peça no visor, ou numa linha da aba <b>Elementos</b>, para ver seus parâmetros. Enquanto isso, o que este arquivo traz:'
+  }));
+
+  const dl = el('dl', 'props');
+  linhaProp(dl, 'Esquema', M.schema);
+  linhaProp(dl, 'Exportado por', M.aplicacao);
+  linhaProp(dl, 'Unidade do arquivo', M.unidade);
+  linhaProp(dl, 'Pavimentos', M.pavimentos.join(', '));
+  linhaProp(dl, 'Sistemas', M.sistemas.filter(x => !/\(sem/.test(x)).length);
+  linhaProp(dl, 'Bitolas', M.diametros.map(d => 'DN ' + d).join(', '));
+  p.appendChild(dl);
+
+  // de onde veio cada diâmetro — o IFC do Revit não exporta NominalDiameter
+  const cont = {};
+  for (const e of M.elements) { const k = e.dnFonte || 'nenhum'; cont[k] = (cont[k] || 0) + 1; }
+  const d = el('details', 'pset'); d.open = true;
+  d.appendChild(el('summary', null, 'De onde vem o diâmetro'));
+  const txt = el('p', 'empty');
+  txt.style.margin = '6px 0 4px';
+  txt.textContent = 'Este IFC não traz a propriedade NominalDiameter: o Revit exportou apenas Length no Pset_FlowSegmentPipeSegment. ' +
+    'O diâmetro abaixo foi reconstruído a partir do arquivo.';
+  d.appendChild(txt);
+  const dd = el('dl', 'props');
+  const rotulos = { geom: 'Perfil circular da geometria', geomRet: 'Perfil retangular da geometria', porta: 'Tubo ligado à porta IFC', pset: 'Propriedade do IFC', nome: 'Número no nome do tipo', nenhum: 'Não determinado' };
+  for (const k of ['geom', 'geomRet', 'porta', 'pset', 'nome', 'nenhum'])
+    if (cont[k]) linhaProp(dd, rotulos[k], cont[k] + ' elementos');
+  d.appendChild(dd);
+  p.appendChild(d);
+}
+
+function linhaProp(dl, k, v) {
+  if (v == null || v === '') return;
+  dl.appendChild(el('dt', null, k));
+  dl.appendChild(el('dd', null, String(v)));
+}
+
+function painelElemento() {
+  const p = $('#elPanel');
+  marcarAba();
+  const t = $('#elTitulo');
+  if (t) t.textContent = S.conj ? 'Conjunto selecionado' : (S.sel >= 0 ? 'Elemento selecionado' : 'Este modelo');
+  if (S.sel < 0 && !S.conj) { painelModelo(p); return; }
+  if (S.conj) { painelConjunto(p); return; }
+  p.innerHTML = '';
+  detalheElemento(p, S.model.elements[S.sel], false);
+}
+
+function detalheElemento(p, e, compacto) {
+  const kps = el('div', 'keyparams');
+
+  // 1. diâmetro
+  const kp1 = el('div', 'kp dn');
+  kp1.appendChild(el('div', 'k', 'Diâmetro'));
+  let dnTxt = '—';
+  if (e.dnPortas.length > 1) dnTxt = e.dnPortas.map(d => d + ' mm').join(' × ');
+  else if (e.dn) dnTxt = e.dn + ' mm';
+  else if (e.largura) dnTxt = fmt(e.largura, 0) + ' × ' + fmt(e.altura, 0) + ' mm';
+  kp1.appendChild(el('div', 'v', dnTxt));
+  kp1.appendChild(el('div', 'src', e.dnFonte ? 'origem: ' + FONTE_DN[e.dnFonte] : 'o IFC não traz diâmetro para esta peça'));
+  kps.appendChild(kp1);
+
+  if (!compacto) {
+    // 2. tipo de tubo
+    const kp2 = el('div', 'kp tp');
+    kp2.appendChild(el('div', 'k', 'Tipo'));
+    kp2.appendChild(el('div', 'v', e.tipo || e.familia || '—'));
+    kp2.appendChild(el('div', 'src', e.familia ? 'família: ' + e.familia : ''));
+    kps.appendChild(kp2);
+
+    // 3. sistema
+    const kp3 = el('div', 'kp sys');
+    kp3.appendChild(el('div', 'k', 'Sistema'));
+    kp3.appendChild(el('div', 'v', e.sistemaClasse));
+    kp3.appendChild(el('div', 'src', e.sistemas.length ? e.sistemas.join(' · ') : 'não atribuído a nenhum IfcSystem'));
+    kps.appendChild(kp3);
+  }
+  p.appendChild(kps);
+
+  const dl = el('dl', 'props');
+  if (compacto) linhaProp(dl, 'Sistema', e.sistema || e.sistemaClasse);
+  linhaProp(dl, 'Categoria', e.categoria);
+  if (!compacto) linhaProp(dl, 'Classe IFC', e.ifcType);
+  if (ehLinear(e) && e.comprimento) linhaProp(dl, 'Comprimento', fmt(e.comprimento, 3) + ' m');
+  if (e.parede) linhaProp(dl, 'Parede', fmt(e.parede, 1) + ' mm');
+  linhaProp(dl, 'Pavimento', e.pavimento);
+  if (!compacto) {
+    linhaProp(dl, 'Material', e.material);
+    linhaProp(dl, 'Fabricante', e.fabricante);
+    linhaProp(dl, 'Perfil', e.perfil);
+  }
+  linhaProp(dl, 'ID no Revit', e.tag);
+  if (!compacto) linhaProp(dl, 'GUID', e.guid);
+  p.appendChild(dl);
+
+  if (!compacto) {
+    const nomes = Object.keys(e.props).sort();
+    if (nomes.length) {
+      const d = el('details', 'pset');
+      d.appendChild(el('summary', null, 'Propriedades do IFC (' + nomes.length + ' conjuntos)'));
+      for (const nome of nomes) {
+        const bag = e.props[nome];
+        const chaves = Object.keys(bag);
+        if (!chaves.length) continue;
+        d.appendChild(el('div', null, nome)).style.cssText = 'font-family:var(--mono);font-size:10.5px;color:var(--text-faint);margin-top:7px';
+        const dd = el('dl', 'props');
+        for (const k of chaves) linhaProp(dd, k, bag[k].value);
+        d.appendChild(dd);
+      }
+      p.appendChild(d);
+    }
+
+    const acoes = el('div', 'row'); acoes.style.marginTop = '10px';
+    const b1 = el('button', 'btn', 'Dar zoom na peça'); b1.onclick = () => enquadrar(e.i, true);
+    const b2 = el('button', 'btn', 'Ocultar'); b2.onclick = () => { S.visivelEl[e.i] = 0; atualizarVisibilidade(); renderTabs(); };
+    acoes.appendChild(b1); acoes.appendChild(b2);
+    p.appendChild(acoes);
+  }
+}
+
+/* =========================================================
+   8. Tabelas
+   ========================================================= */
+let tabelaAtual = [];       // para o botão copiar
+
+function tabela(colunas, linhas, opts) {
+  opts = opts || {};
+  const t = el('table');
+  const thead = el('thead'), tr = el('tr');
+  for (const c of colunas) {
+    const th = el('th', c.n ? 'n' : null, c.t);
+    tr.appendChild(th);
+  }
+  thead.appendChild(tr); t.appendChild(thead);
+  const tb = el('tbody');
+  for (const L of linhas) {
+    const r = el('tr');
+    if (L._tot) r.className = 'tot';
+    if (L._el != null) {
+      r.className = (r.className + ' clickable').trim();
+      r.dataset.el = L._el;
+      r.title = 'Clique para ver a peça. Shift+clique soma à seleção.';
+      r.onclick = (ev) => { if (somando(ev)) alternarNaSelecao([L._el]); else selecionar(L._el, true); };
+    } else if (L._els && L._els.length) {
+      r.className = (r.className + ' clickable').trim();
+      r.dataset.conj = L._chave;
+      r.title = 'Clique para destacar as ' + L._els.length + ' peças no 3D. Shift+clique soma à seleção atual.';
+      r.onclick = (ev) => {
+        if (somando(ev)) alternarNaSelecao(L._els.slice());
+        else selecionarConjunto(L._rotulo, L._els.slice(), L._chave);
+      };
+    }
+    colunas.forEach((c, i) => {
+      const td = el('td', c.n ? 'n' : null);
+      const v = L.c[i];
+      if (v && v.html) td.innerHTML = v.html; else td.textContent = v == null ? '' : v;
+      r.appendChild(td);
+    });
+    tb.appendChild(r);
+  }
+  t.appendChild(tb);
+  tabelaAtual = [colunas.map(c => c.t)].concat(linhas.map(L => L.c.map(v => (v && v.txt !== undefined) ? v.txt : (v == null ? '' : String(v)))));
+  return t;
+}
+
+function pill(dn) {
+  if (!dn) return { html: '<span class="dnpill" style="color:' + COR_SEM + ';border-color:' + COR_SEM + '">—</span>', txt: '' };
+  const g = S.modo === 'diametro' ? S.grupos.find(x => x.chave === 'DN ' + dn) : null;
+  const cor = g ? g.cor : RAMPA_DN[Math.max(0, S.model.diametros.indexOf(dn)) % RAMPA_DN.length];
+  return { html: '<span class="dnpill" style="color:' + cor + ';border-color:' + cor + '">DN ' + dn + '</span>', txt: 'DN ' + dn };
+}
+
+function renderTabs() {
+  const visFiltro = (e) => elementoVisivel(e.i);
+  const Q = quantitativos(S.model, visFiltro);
+  renderResumo(Q);
+  renderSistemas(Q);
+  renderPecas(Q);
+  renderPecasSistema(Q);
+  renderElementos();
+  mostrarPane(S.pane);
+}
+
+function renderResumo(Q) {
+  const p = $('#pane-resumo'); p.innerHTML = '';
+  const M = S.model;
+  const nTubos = M.elements.filter(e => elementoVisivel(e.i) && ehLinear(e)).length;
+  const nCon = M.elements.filter(e => elementoVisivel(e.i) && e.categoria === 'Conexão').length;
+  const nSis = new Set(M.elements.filter(e => elementoVisivel(e.i)).map(e => e.sistemaClasse)).size;
+
+  const tiles = el('div', 'tiles');
+  const addTile = (t, n, u) => {
+    const d = el('div', 'tile');
+    d.appendChild(el('div', 't', t));
+    const nn = el('div', 'n'); nn.textContent = n;
+    if (u) { const s = el('span', 'u', ' ' + u); nn.appendChild(s); }
+    d.appendChild(nn); tiles.appendChild(d);
+  };
+  addTile('Tubo', fmt(Q.totalM, 2), 'm');
+  addTile('Trechos de tubo', nTubos);
+  addTile('Conexões', nCon);
+  addTile('Sistemas', nSis);
+  addTile('Elementos à vista', Q.nElementos);
+  p.appendChild(tiles);
+
+  p.appendChild(Object.assign(el('p', 'tablehint'),
+    { textContent: 'Clique numa linha para destacar esses tubos no 3D. Comprimentos medidos na geometria do IFC (extrusão de cada trecho) e conferidos contra a propriedade Length do arquivo. Os números acompanham o que está visível no visor.' }));
+
+  const trechosDN = new Map();
+  for (const e of S.model.elements)
+    if (elementoVisivel(e.i) && ehLinear(e)) trechosDN.set(e.dn || 0, (trechosDN.get(e.dn || 0) || 0) + 1);
+  const linhas = Q.porDN.map(r => ({
+    _els: r.ids, _chave: 'dn:' + r.dn, _rotulo: 'Tubo DN ' + r.dn,
+    c: [pill(r.dn), fmt(r.m, 2), trechosDN.get(r.dn) || 0]
+  }));
+  linhas.push({ _tot: 1, c: [{ html: 'Total', txt: 'Total' }, fmt(Q.totalM, 2), nTubos] });
+  p.appendChild(tabela([{ t: 'Diâmetro' }, { t: 'Comprimento (m)', n: 1 }, { t: 'Trechos', n: 1 }], linhas));
+}
+
+function ehLinear(e) { return e.categoria === 'Tubo' || e.categoria === 'Eletroduto / calha' || e.categoria === 'Duto'; }
+
+function renderSistemas(Q) {
+  const p = $('#pane-sistemas'); p.innerHTML = '';
+  p.appendChild(Object.assign(el('p', 'tablehint'),
+    { textContent: 'Clique numa linha para destacar esses trechos no 3D. O sistema vem do IfcSystem a que o Revit vinculou cada trecho; a bitola, do perfil circular da geometria.' }));
+  const linhas = Q.porSistemaDN.map(r => ({
+    _els: r.ids, _chave: 'sis:' + r.sistema + ':' + r.dn,
+    _rotulo: r.sistema + ' · DN ' + r.dn,
+    c: [r.sistema, pill(r.dn), r.tipo, fmt(r.m, 2), r.n]
+  }));
+  linhas.push({ _tot: 1, c: ['Total', '', '', fmt(Q.totalM, 2), Q.porSistemaDN.reduce((s, r) => s + r.n, 0)] });
+  p.appendChild(tabela([{ t: 'Sistema' }, { t: 'Diâmetro' }, { t: 'Tipo de tubo' }, { t: 'Comprimento (m)', n: 1 }, { t: 'Trechos', n: 1 }], linhas));
+}
+
+function renderPecas(Q) {
+  const p = $('#pane-pecas'); p.innerHTML = '';
+  p.appendChild(Object.assign(el('p', 'tablehint'),
+    { textContent: 'Clique numa linha para destacar essas peças no 3D e percorrê-las uma a uma. A bitola vem dos diâmetros dos tubos ligados às portas de cada peça no IFC — por isso reduções e tês aparecem com duas ou três medidas.' }));
+  const linhas = Q.pecas.map(r => ({
+    _els: r.ids, _chave: 'pc:' + r.objType + ':' + r.bitola,
+    _rotulo: r.tipo + ' · ' + (r.bitola === '—' ? 'sem bitola' : r.bitola + ' mm'),
+    c: [r.categoria, r.familia, r.tipo, r.bitola, r.n]
+  }));
+  linhas.push({ _tot: 1, c: ['Total', '', '', '', Q.pecas.reduce((s, r) => s + r.n, 0)] });
+  p.appendChild(tabela([{ t: 'Categoria' }, { t: 'Família' }, { t: 'Tipo' }, { t: 'Bitola (mm)' }, { t: 'Quantidade', n: 1 }], linhas));
+}
+
+function renderPecasSistema(Q) {
+  const p = $('#pane-pecas-sistema'); p.innerHTML = '';
+  p.appendChild(Object.assign(el('p', 'tablehint'),
+    { textContent: 'As mesmas conexões, registros e dispositivos da aba anterior, separados pela rede a que o IFC os vincula. ' +
+      'Cada rede fecha com o seu subtotal. Clique numa linha para destacar as peças no 3D; Shift+clique soma à seleção.' }));
+
+  const linhas = [];
+  let sistemaAtual = null, subtotal = 0;
+  const fechaBloco = () => {
+    if (sistemaAtual !== null)
+      linhas.push({ _tot: 1, c: ['Subtotal · ' + sistemaAtual, '', '', '', subtotal] });
+  };
+  for (const r of Q.pecasPorSistema) {
+    if (r.sistema !== sistemaAtual) { fechaBloco(); sistemaAtual = r.sistema; subtotal = 0; }
+    subtotal += r.n;
+    linhas.push({
+      _els: r.ids, _chave: 'ps:' + r.sistema + ':' + r.objType + ':' + r.bitola,
+      _rotulo: r.tipo + ' · ' + (r.bitola === '—' ? 'sem bitola' : r.bitola + ' mm') + ' · ' + r.sistema,
+      c: [r.sistema, r.categoria, r.tipo, r.bitola, r.n]
+    });
+  }
+  fechaBloco();
+  const total = Q.pecasPorSistema.reduce((s, r) => s + r.n, 0);
+  linhas.push({ _tot: 1, c: ['Total geral', '', '', '', total] });
+
+  p.appendChild(tabela([{ t: 'Sistema' }, { t: 'Categoria' }, { t: 'Tipo' },
+  { t: 'Bitola (mm)' }, { t: 'Quantidade', n: 1 }], linhas));
+}
+
+function renderElementos() {
+  const p = $('#pane-elementos');
+  p.innerHTML = '';
+  const barra = el('div');
+  barra.style.cssText = 'display:flex;gap:9px;align-items:center;margin-bottom:9px;flex-wrap:wrap';
+  const busca = el('input');
+  busca.type = 'search';
+  busca.id = 'buscaEl';
+  busca.placeholder = 'Filtrar por tipo, sistema, DN, ID do Revit…';
+  busca.value = S.busca;
+  busca.style.maxWidth = '340px';
+  busca.oninput = () => { S.busca = busca.value; renderCorpoElementos(); };
+  barra.appendChild(busca);
+  barra.appendChild(el('span', 'chip', '')).id = 'elCount';
+  p.appendChild(barra);
+  p.appendChild(el('div')).id = 'elTable';
+  renderCorpoElementos();
+}
+
+function renderCorpoElementos() {
+  const alvo = $('#elTable');
+  if (!alvo) { renderElementos(); return; }
+  const q = S.busca.trim().toLowerCase();
+  const els = S.model.elements.filter(e => {
+    if (!elementoVisivel(e.i)) return false;
+    if (!q) return true;
+    return (e.objType + ' ' + e.sistemaClasse + ' ' + e.categoria + ' ' + e.tag +
+      ' DN' + e.dn + ' ' + e.dn + ' ' + e.pavimento + ' ' + e.material + ' ' + e.fabricante)
+      .toLowerCase().includes(q);
+  });
+  const corte = els.slice(0, 600);
+  const cnt = $('#elCount');
+  if (cnt) cnt.textContent = els.length + ' elementos' + (els.length > 600 ? ' — mostrando os 600 primeiros' : '');
+  const linhas = corte.map(e => ({
+    _el: e.i,
+    c: [e.categoria, e.tipo || e.familia, pill(e.dn), e.sistemaClasse,
+    ehLinear(e) && e.comprimento ? fmt(e.comprimento, 3) : '', e.tag]
+  }));
+  alvo.innerHTML = '';
+  alvo.appendChild(tabela([{ t: 'Categoria' }, { t: 'Tipo' }, { t: 'Diâmetro' }, { t: 'Sistema' },
+  { t: 'Comprimento (m)', n: 1 }, { t: 'ID no Revit', n: 1 }], linhas));
+  marcarLinha();
+}
+
+function marcarLinha() {
+  document.querySelectorAll('tbody tr[data-el]').forEach(tr => {
+    tr.classList.toggle('sel', +tr.dataset.el === S.sel);
+  });
+  document.querySelectorAll('tbody tr[data-conj]').forEach(tr => {
+    tr.classList.toggle('conj', !!S.conj && tr.dataset.conj === S.conj.chave);
+  });
+}
+
+function mostrarPane(id) {
+  S.pane = id;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.pane === id));
+  document.querySelectorAll('.tabpane').forEach(x => x.classList.toggle('on', x.id === 'pane-' + id));
+  // o botão Copiar sempre leva a tabela da aba aberta
+  const fn = { resumo: renderResumo, sistemas: renderSistemas, pecas: renderPecas, 'pecas-sistema': renderPecasSistema };
+  if (fn[id]) fn[id](quantitativos(S.model, (e) => elementoVisivel(e.i)));
+  else renderCorpoElementos();
+  marcarLinha();
+}
+
+/* =========================================================
+   9. Ligações da interface
+   ========================================================= */
+$('#tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab'); if (b) mostrarPane(b.dataset.pane);
+});
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => vista(b.dataset.view));
+$('#showAll').onclick = () => { S.grupos.forEach(g => g.visivel = true); S.visivelEl.fill(1); atualizarVisibilidade(); renderLegenda(); renderTabs(); };
+$('#invert').onclick = () => { S.grupos.forEach(g => g.visivel = !g.visivel); atualizarVisibilidade(); renderLegenda(); renderTabs(); };
+$('#zoomClick').onchange = e => { S.zoomClique = e.target.checked; };
+$('#focar').onchange = e => { S.focar = e.target.checked; atualizarVisibilidade(); };
+$('#ghost').onchange = e => { S.ghost = e.target.checked; atualizarVisibilidade(); };
+$('#grid').onchange = e => { if (grade) { grade.visible = e.target.checked; precisaRender = true; } };
+$('#flat').onchange = e => {
+  meshSolido.material.flatShading = e.target.checked;
+  meshSolido.material.needsUpdate = true; precisaRender = true;
+};
+$('#isoSel').onclick = () => {
+  if (S.sel < 0) return;
+  S.visivelEl.fill(0); S.visivelEl[S.sel] = 1;
+  S.grupos.forEach(g => g.visivel = true);
+  atualizarVisibilidade(); renderLegenda(); renderTabs();
+};
+$('#hideSel').onclick = () => { if (S.sel >= 0) { S.visivelEl[S.sel] = 0; atualizarVisibilidade(); renderTabs(); } };
+$('#clip').oninput = e => {
+  const f = +e.target.value / 100;
+  S.clipZ = f >= 1 ? Infinity : S.clipMin + (S.clipMax - S.clipMin) * f;
+  atualizaClipLabel();
+  atualizarVisibilidade(); renderTabs();
+};
+function atualizaClipLabel() {
+  $('#clipV').textContent = S.clipZ === Infinity ? '(sem corte)' : fmt(S.clipZ, 2) + ' m';
+}
+/* ---------- painel de propriedades e alças de redimensionamento ---------- */
+const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } };
+const ler = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+
+function painelDirAberto(aberto, lembrar) {
+  const pn = $('#painelDir'), rs = $('#rszDir'), aba = $('#abaDir');
+  pn.style.display = aberto ? '' : 'none';
+  rs.style.display = aberto ? '' : 'none';
+  aba.style.display = aberto ? 'none' : '';
+  if (lembrar !== false) guardar('leitor-ifc-painel-dir', aberto ? '1' : '0');
+  redimensionar();
+}
+
+// quando fechado, a aba avisa que há uma peça selecionada esperando
+function marcarAba() {
+  const aba = $('#abaDir');
+  if (!aba) return;
+  const tem = S.sel >= 0 || !!S.conj;
+  aba.classList.toggle('tem', tem);
+  aba.textContent = tem ? 'Ver propriedades' : 'Propriedades';
+}
+
+$('#abaDir').onclick = () => painelDirAberto(true);
+$('#fecharDir').onclick = () => painelDirAberto(false);
+
+function instalarAlca(id, aplicar) {
+  const h = $(id);
+  if (!h) return;
+  let ativo = false;
+  h.addEventListener('pointerdown', e => {
+    ativo = true; h.setPointerCapture(e.pointerId); h.classList.add('ativa');
+    e.preventDefault();
+  });
+  h.addEventListener('pointermove', e => { if (ativo) { aplicar(e); redimensionar(); } });
+  const fim = () => { if (ativo) { ativo = false; h.classList.remove('ativa'); redimensionar(); } };
+  h.addEventListener('pointerup', fim);
+  h.addEventListener('pointercancel', fim);
+}
+
+function largura(painel, px, min, max, chave) {
+  const v = Math.max(min, Math.min(max, px));
+  painel.style.flexBasis = v + 'px';
+  painel.style.width = v + 'px';
+  guardar(chave, String(Math.round(v)));
+}
+
+instalarAlca('#rszEsq', e => largura($('#painelEsq'),
+  e.clientX - $('#painelEsq').getBoundingClientRect().left, 150, 460, 'leitor-ifc-larg-esq'));
+
+instalarAlca('#rszDir', e => largura($('#painelDir'),
+  $('#painelDir').getBoundingClientRect().right - e.clientX, 190, 560, 'leitor-ifc-larg-dir'));
+
+instalarAlca('#rszBaixo', e => {
+  const g = $('#gaveta');
+  const alt = Math.max(70, Math.min(innerHeight * 0.8, g.getBoundingClientRect().bottom - e.clientY));
+  g.style.height = alt + 'px';
+  g.style.maxHeight = 'none';
+  guardar('leitor-ifc-alt-gaveta', String(Math.round(alt)));
+});
+
+// restaura o que ficou guardado da última sessão
+(function restaurarLayout() {
+  const le = +ler('leitor-ifc-larg-esq');
+  if (le) largura($('#painelEsq'), le, 150, 460, 'leitor-ifc-larg-esq');
+  const ld = +ler('leitor-ifc-larg-dir');
+  if (ld) largura($('#painelDir'), ld, 190, 560, 'leitor-ifc-larg-dir');
+  const ag = +ler('leitor-ifc-alt-gaveta');
+  if (ag) { const g = $('#gaveta'); g.style.height = ag + 'px'; g.style.maxHeight = 'none'; }
+  painelDirAberto(ler('leitor-ifc-painel-dir') === '1', false);
+})();
+
+/* ---------- tema claro / escuro ---------- */
+function modoTema() {
+  try {
+    const m = localStorage.getItem('leitor-ifc-tema');
+    if (m === 'light' || m === 'dark') return m;
+  } catch (e) { }
+  return 'auto';
+}
+
+function definirTema(modo) {
+  const r = document.documentElement;
+  if (modo === 'auto') {
+    // volta a seguir o tema de quem hospeda a página, ou o do sistema
+    const host = r.dataset.temaHost;
+    if (host) r.setAttribute('data-theme', host); else r.removeAttribute('data-theme');
+    try { localStorage.removeItem('leitor-ifc-tema'); } catch (e) { }
+  } else {
+    r.setAttribute('data-theme', modo);
+    try { localStorage.setItem('leitor-ifc-tema', modo); } catch (e) { }
+  }
+  const rot = { auto: 'automático', light: 'claro', dark: 'escuro' };
+  const b = $('#temaBtn');
+  if (b) b.textContent = 'Tema: ' + rot[modo];
+  aplicarTema3D();
+}
+
+$('#temaBtn').onclick = () => {
+  const ordem = ['auto', 'light', 'dark'];
+  definirTema(ordem[(ordem.indexOf(modoTema()) + 1) % ordem.length]);
+};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (modoTema() === 'auto') aplicarTema3D();
+});
+definirTema(modoTema());
+
+$('#openBtn').onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  $('#loading').classList.remove('hidden');
+  $('#lerr').classList.add('hidden');
+  await progresso(0.02, 'Lendo ' + f.name);
+  try {
+    const buf = await f.arrayBuffer();
+    const txt = new TextDecoder('utf-8').decode(buf);
+    if (!/ISO-10303-21/i.test(txt.slice(0, 400))) throw new Error('Este arquivo não parece ser um IFC no formato STEP.');
+    await montar(txt);
+    $('#fileName').textContent = f.name;
+  } catch (err) {
+    $('#lerr').classList.remove('hidden');
+    $('#lerr').textContent = err.message || String(err);
+    $('#lmsg').textContent = 'Escolha outro arquivo:';
+  }
+};
+$('#copyBtn').onclick = async () => {
+  const txt = tabelaAtual.map(l => l.join('\t')).join('\n');
+  const b = $('#copyBtn'), antes = b.textContent;
+  try {
+    await navigator.clipboard.writeText(txt);
+    b.textContent = 'Copiado — cole no Excel';
+  } catch (_) {
+    b.textContent = 'O navegador bloqueou a cópia';
+  }
+  setTimeout(() => { b.textContent = antes; }, 2200);
+};
+
+iniciar();
+</script>
+</body>
+</html>
