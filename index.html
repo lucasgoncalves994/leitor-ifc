@@ -382,6 +382,8 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
       <h2>Visor</h2>
       <label class="swbox"><input type="checkbox" id="zoomClick" checked> Dar zoom na peça ao clicar</label>
       <label class="swbox"><input type="checkbox" id="focar" checked> Esmaecer o resto ao selecionar</label>
+      <label class="fld" for="fadeCtx">Visibilidade do resto <span id="fadeV" class="mono">50%</span></label>
+      <input type="range" id="fadeCtx" min="15" max="100" value="50">
       <label class="swbox"><input type="checkbox" id="ghost" checked> Mostrar oculto em transparência</label>
       <label class="swbox"><input type="checkbox" id="contorno" checked> Contorno nas peças (separa as conexões)</label>
       <label class="swbox"><input type="checkbox" id="grid" checked> Mostrar grade de referência</label>
@@ -496,14 +498,14 @@ function hexRGB(h) {
 /* ---------- cores do visor por tema ---------- */
 const TEMA3D = {
   dark: {
-    fundo: 0x0b1016, grade: 0x27323f, fade: 0.22, ajusteCor: 1,
+    fundo: 0x0b1016, grade: 0x27323f, ajusteCor: 1,
     fantasma: 0x6b7a8c, fantasmaOp: 0.075,
     foco: 0xfff1a8, conjunto: 0xff8a3d,
     contorno: 0x04070b, contornoOp: 0.9,
     ceu: 0xdfeaf5, chao: 0x2a3340, ambiente: 1.05, luz1: 0.55, luz2: 0.35
   },
   light: {
-    fundo: 0xf4f6f9, grade: 0xc7d0da, fade: 0.28, ajusteCor: 0.8,
+    fundo: 0xf4f6f9, grade: 0xc7d0da, ajusteCor: 0.8,
     fantasma: 0x334155, fantasmaOp: 0.09,
     foco: 0xc2185b, conjunto: 0xd35400,
     contorno: 0x111a24, contornoOp: 0.85,
@@ -633,7 +635,9 @@ let renderer, scene, cam, geomSolido, geomFantasma, geomSel, geomConj, geomConte
 let meshSolido, meshFantasma, meshSel, meshConj, meshContexto, grade, raycaster;
 let idxSolido, triSolido, idxFantasma, idxContexto, triContexto;
 let nSolido = 0, nFantasma = 0, nContexto = 0;
-let corAttr, corFadeAttr, luzes = {}, precisaRender = true;
+let corAttr, luzes = {}, precisaRender = true;
+// esmaecimento do resto do modelo: cor do fundo e quanto da cor original sobra
+const uCtx = { uFundo: { value: new THREE.Color(0x0b1016) }, uFade: { value: 0.5 } };
 let rtId, matId, cenaContorno, camContorno, matContorno;   // contorno por peça
 
 /* Contorno por peça, em tela: a cena é desenhada num alvo com o número de cada
@@ -755,7 +759,6 @@ function construirCena() {
   const pos = new THREE.BufferAttribute(M.positions, 3);
   const cores = new Uint8Array(M.positions.length);
   corAttr = new THREE.BufferAttribute(cores, 3, true);
-  corFadeAttr = new THREE.BufferAttribute(new Uint8Array(M.positions.length), 3, true);
 
   // normais a partir de uma geometria temporária com o índice completo
   const tmp = new THREE.BufferGeometry();
@@ -785,7 +788,6 @@ function construirCena() {
   geomSel = mk(new Uint32Array(0));
   geomConj = mk(new Uint32Array(0));
   geomContexto = mk(idxContexto);
-  geomContexto.setAttribute('color', corFadeAttr);   // cores já misturadas com o fundo
 
   const centro = new THREE.Vector3(
     (M.bbox.min[0] + M.bbox.max[0]) / 2, (M.bbox.min[1] + M.bbox.max[1]) / 2, (M.bbox.min[2] + M.bbox.max[2]) / 2);
@@ -798,10 +800,17 @@ function construirCena() {
   });
   const matSel = new THREE.MeshBasicMaterial({ color: 0xfff1a8, side: THREE.DoubleSide });
   const matConj = new THREE.MeshBasicMaterial({ color: 0xff8a3d, side: THREE.DoubleSide });
-  // resto do modelo enquanto há seleção: opaco e escurecido (cor do material multiplica a
-  // cor do vértice). Sem mesclagem não há acúmulo onde os tubos se cruzam, então o
-  // esmaecimento fica igual em toda a cena.
-  const matContexto = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  // resto do modelo enquanto há seleção: opaco e iluminado como o modelo normal, e só
+  // depois misturado com o fundo no fim do fragmento (uFade = quanto da cor sobra).
+  // Sem mesclagem (transparência) não há acúmulo onde os tubos se cruzam, então o
+  // esmaecimento fica igual em toda a cena, e a iluminação mantém o volume das peças.
+  const matContexto = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  matContexto.onBeforeCompile = (sh) => {
+    sh.uniforms.uFundo = uCtx.uFundo; sh.uniforms.uFade = uCtx.uFade;
+    sh.fragmentShader = 'uniform vec3 uFundo; uniform float uFade;\n' + sh.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      'gl_FragColor.rgb = mix(uFundo, gl_FragColor.rgb, uFade);\n#include <dithering_fragment>');
+  };
 
   meshSolido = new THREE.Mesh(geomSolido, matSolido);
   meshFantasma = new THREE.Mesh(geomFantasma, matFantasma);
@@ -1125,6 +1134,7 @@ function aplicarTema3D() {
   if (!renderer) return;
   const t = TEMA3D[temaEfetivo()];
   renderer.setClearColor(t.fundo, 1);
+  uCtx.uFundo.value.setHex(t.fundo);
   if (grade) { grade.material.color.setHex(t.grade); grade.material.needsUpdate = true; }
   if (meshFantasma) { meshFantasma.material.color.setHex(t.fantasma); meshFantasma.material.opacity = t.fantasmaOp; }
   if (meshSel) meshSel.material.color.setHex(t.foco);
@@ -1209,10 +1219,9 @@ function aplicarModo(modo) {
 }
 
 function pintar() {
-  const M = S.model, els = M.elements, cores = corAttr.array, fade = corFadeAttr.array;
+  const M = S.model, els = M.elements, cores = corAttr.array;
   const t = TEMA3D[temaEfetivo()];
-  const bg = [(t.fundo >> 16) & 255, (t.fundo >> 8) & 255, t.fundo & 255];
-  const k = t.fade, aj = t.ajusteCor;
+  const aj = t.ajusteCor;
   const rgbCache = S.grupos.map(g => hexRGB(g.cor));
   for (let i = 0; i < els.length; i++) {
     const e = els[i];
@@ -1222,18 +1231,12 @@ function pintar() {
     } else rgb = rgbCache[S.grupoDoEl[i]];
     // no tema claro as cores são aprofundadas para não lavarem no fundo branco
     const c0 = Math.round(rgb[0] * aj), c1 = Math.round(rgb[1] * aj), c2 = Math.round(rgb[2] * aj);
-    // versão esmaecida: mistura com o fundo do visor, igual nos dois temas
-    const f0 = Math.round(c0 * k + bg[0] * (1 - k));
-    const f1 = Math.round(c1 * k + bg[1] * (1 - k));
-    const f2 = Math.round(c2 * k + bg[2] * (1 - k));
     const fim = (e.vStart + e.vCount) * 3;
     for (let p = e.vStart * 3; p < fim; p += 3) {
       cores[p] = c0; cores[p + 1] = c1; cores[p + 2] = c2;
-      fade[p] = f0; fade[p + 1] = f1; fade[p + 2] = f2;
     }
   }
   corAttr.needsUpdate = true;
-  corFadeAttr.needsUpdate = true;
   precisaRender = true;
 }
 
@@ -1977,6 +1980,15 @@ $('#showAll').onclick = () => { S.grupos.forEach(g => g.visivel = true); S.visiv
 $('#invert').onclick = () => { S.grupos.forEach(g => g.visivel = !g.visivel); atualizarVisibilidade(); renderLegenda(); renderTabs(); };
 $('#zoomClick').onchange = e => { S.zoomClique = e.target.checked; };
 $('#focar').onchange = e => { S.focar = e.target.checked; atualizarVisibilidade(); };
+$('#fadeCtx').oninput = e => {
+  const v = +e.target.value;
+  uCtx.uFade.value = v / 100; $('#fadeV').textContent = v + '%';
+  guardar('fadeCtx', v); precisaRender = true;
+};
+{ // lembra o ajuste (localStorage direto: `ler` ainda não existe neste ponto do script)
+  let v = NaN; try { v = +localStorage.getItem('fadeCtx'); } catch (e) { }
+  if (v >= 15 && v <= 100) { $('#fadeCtx').value = v; $('#fadeV').textContent = v + '%'; uCtx.uFade.value = v / 100; }
+}
 $('#ghost').onchange = e => { S.ghost = e.target.checked; atualizarVisibilidade(); };
 $('#contorno').onchange = e => { S.contorno = e.target.checked; precisaRender = true; };
 $('#grid').onchange = e => { if (grade) { grade.visible = e.target.checked; precisaRender = true; } };

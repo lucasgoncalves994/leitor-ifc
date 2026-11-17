@@ -96,9 +96,14 @@ a união e o corpo eram selecionados e contados juntos.
 
 - **Esmaecimento sem transparência.** Transparência real *soma* onde os tubos
   se cruzam, e a mesma peça aparecia mais clara ou mais escura conforme o
-  número de camadas atrás dela. Hoje existe um segundo atributo de cor
-  (`corFadeAttr`) com a cor já misturada ao fundo do visor, desenhado opaco.
-  Um pixel, uma amostra, esmaecimento igual em toda a cena.
+  número de camadas atrás dela. O resto do modelo (`meshContexto`) é opaco,
+  **iluminado** (Lambert, como o modelo normal) e só no fim do fragmento a cor é
+  misturada com o fundo: `mix(uFundo, cor, uFade)` via `onBeforeCompile`
+  (uniforms em `uCtx`). Um pixel, uma amostra, esmaecimento igual em toda a
+  cena, e a iluminação mantém o volume das peças. `uFade` é o quanto da cor
+  sobra; padrão 50%, ajustável no painel Visor ("Visibilidade do resto",
+  guardado em localStorage). A versão anterior pré-misturava a cor no vértice
+  (22 a 28% da cor, sem iluminação) e o resto virava manchas chapadas.
   **Não trocar por `transparent: true`.**
 
 - **Render em dois passos quando há seleção.** Primeiro o contexto esmaecido,
