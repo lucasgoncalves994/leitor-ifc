@@ -150,10 +150,13 @@ a união e o corpo eram selecionados e contados juntos.
 - **Barra de ocultação no visor** (`#barraOcultar`, `atualizarBarraOcultar`).
   Com peça(s) selecionada(s) aparece "Ocultar peça / N peças"; o primeiro uso liga
   o modo de ocultação (`S.ocultando`): a seleção é limpa, a barra passa a mostrar
-  o contador e "Finalizar ocultações", e o clique seguinte escolhe outra peça. Finalizar
-  só sai do modo; as ocultas continuam ocultas e "Mostrar tudo" as devolve (e
-  encerra o modo sozinho). É atualizada por `atualizarHud`, que toda mudança de
-  seleção ou visibilidade já chama.
+  o contador e "Finalizar ocultações", e o clique seguinte escolhe outra peça.
+  **Finalizar devolve ao visor as peças ocultas por esta barra** (guardadas em
+  `ocultasDaSessao`) e sai do modo: ocultar serve para ver o que está atrás, não
+  para esconder de vez (a 1ª versão só saía do modo e deixava tudo oculto, o que o
+  usuário não esperava). "Mostrar tudo" também as devolve e encerra o modo;
+  ocultações de outros botões (painel, "Isolar") não são tocadas. É atualizada por
+  `atualizarHud`, que toda mudança de seleção ou visibilidade já chama.
 
 - **Tabelas: Shift+clique seleciona intervalo.** `cliqueLinha` guarda a última
   linha clicada como âncora (`ancoraTabela`) e seleciona tudo entre ela e a

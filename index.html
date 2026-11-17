@@ -597,7 +597,7 @@ async function montar(texto) {
   await progresso(0.97, 'Preparando o visor');
   S.model = M;
   S.visivelEl = new Uint8Array(M.elements.length).fill(1);
-  S.ocultando = false;
+  S.ocultando = false; ocultasDaSessao.clear();
   S.sel = -1;
   construirCena();
   montarCabecalho();
@@ -1335,33 +1335,40 @@ function atualizarSelecao() {
 /* ---- ocultar peças pelo visor ----
    Com uma peça (ou várias) selecionada, a barra oferece "Ocultar". Depois do
    primeiro uso o modo de ocultação fica ativo: cada clique seguinte seleciona outra
-   peça para ocultar, até "Finalizar ocultações". As ocultas continuam ocultas;
-   "Mostrar tudo" as traz de volta. */
+   peça para ocultar, até "Finalizar ocultações", que DEVOLVE ao visor todas as
+   peças ocultas por esta barra (ocultar serve para ver o que está atrás). "Mostrar
+   tudo" também as devolve, e ocultações feitas por outros botões não são tocadas. */
+// peças ocultas por esta barra, na sessão de ocultação em curso
+const ocultasDaSessao = new Set();
+
 function contarOcultas() {
   let n = 0;
-  S.model.elements.forEach((e, i) => { if (e.iCount && !S.visivelEl[i]) n++; });
+  for (const i of ocultasDaSessao) if (!S.visivelEl[i]) n++;     // "Mostrar tudo" já as devolveu?
   return n;
 }
 
 function ocultarSelecao() {
   const ids = idsDestacados();
   if (!ids || !ids.size) return;
-  for (const i of ids) S.visivelEl[i] = 0;
+  for (const i of ids) { S.visivelEl[i] = 0; ocultasDaSessao.add(i); }
   S.ocultando = true;
   limparSelecao();            // segue no modo: o próximo clique escolhe a próxima peça
   renderTabs();
 }
 
+// Finalizar devolve ao visor o que foi ocultado por aqui e sai do modo.
 function finalizarOcultacoes() {
+  for (const i of ocultasDaSessao) S.visivelEl[i] = 1;
+  ocultasDaSessao.clear();
   S.ocultando = false;
-  limparSelecao();
+  limparSelecao();            // também refaz visor, tabelas e a barra
   renderTabs();
 }
 
 function atualizarBarraOcultar() {
   const bar = $('#barraOcultar'); if (!bar) return;
   const nOcultas = contarOcultas();
-  if (S.ocultando && !nOcultas) S.ocultando = false;      // "Mostrar tudo" encerra o modo
+  if (S.ocultando && !nOcultas) { S.ocultando = false; ocultasDaSessao.clear(); }   // "Mostrar tudo" encerra o modo
   const ids = idsDestacados();
   const nSel = ids ? ids.size : 0;
   bar.innerHTML = '';
@@ -1376,7 +1383,7 @@ function atualizarBarraOcultar() {
   if (S.ocultando) {
     bar.appendChild(el('span', 'cnt', nOcultas + (nOcultas === 1 ? ' peça oculta' : ' peças ocultas')));
     const f = el('button', 'btn', 'Finalizar ocultações');
-    f.title = 'Sai do modo de ocultação. As peças ocultas continuam ocultas; "Mostrar tudo" traz de volta.';
+    f.title = 'Devolve ao visor as peças ocultas por esta barra e sai do modo de ocultação.';
     f.onclick = finalizarOcultacoes;
     bar.appendChild(f);
   }
