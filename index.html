@@ -295,6 +295,15 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
   pointer-events:none;
 }
 .hud .chip{background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.18)}
+/* barra de ocultação: aparece com uma peça selecionada e fica enquanto se oculta */
+.ocultbar{
+  position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:3;
+  display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:9px;
+  background:var(--surface);border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,.28);
+}
+.ocultbar .btn{justify-content:center;font-size:11.5px;padding:4px 10px;white-space:nowrap}
+.ocultbar .btn.prim{border-color:var(--accent,#4a90e2);font-weight:600}
+.ocultbar .cnt{font-size:11px;color:var(--text-faint);white-space:nowrap}
 .viewbtns{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:5px}
 .viewbtns .btn{background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.18);justify-content:center;min-width:58px;font-size:11px;padding:4px 8px}
 .tip{
@@ -404,6 +413,7 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
       <button class="btn" data-view="side">Lateral</button>
       <button class="btn" data-view="fit">Enquadrar</button>
     </div>
+    <div class="ocultbar hidden" id="barraOcultar"></div>
     <div class="hud" id="hud"></div>
     <button class="aba" id="abaDir" title="Abrir o painel de propriedades">Propriedades</button>
   </div>
@@ -522,6 +532,7 @@ const S = {
   ghost: true,
   zoomClique: true,
   focar: true,             // esmaece o resto do modelo quando há seleção
+  ocultando: false,        // modo de ocultação ativo (barra com "Finalizar ocultações")
   contorno: true,          // silhueta em cada peça (passo de identificadores + borda na tela)
   pane: 'resumo',
   busca: '',
@@ -584,6 +595,7 @@ async function montar(texto) {
   await progresso(0.97, 'Preparando o visor');
   S.model = M;
   S.visivelEl = new Uint8Array(M.elements.length).fill(1);
+  S.ocultando = false;
   S.sel = -1;
   construirCena();
   montarCabecalho();
@@ -636,6 +648,9 @@ function montarContorno(M) {
     rtId = new THREE.WebGLRenderTarget(4, 4, {
       minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true
     });
+    rtId.depthTexture = new THREE.DepthTexture(4, 4);          // profundidade lida pelo quadro cheio
+    rtId.depthTexture.type = THREE.UnsignedIntType;
+    rtId.depthTexture.minFilter = rtId.depthTexture.magFilter = THREE.NearestFilter;
     matId = new THREE.ShaderMaterial({
       side: THREE.DoubleSide, blending: THREE.NoBlending,
       vertexShader: 'attribute float eid; varying float vId;' +
@@ -647,21 +662,31 @@ function montarContorno(M) {
     matContorno = new THREE.ShaderMaterial({
       transparent: true, depthTest: false, depthWrite: false,
       uniforms: {
-        tId: { value: rtId.texture }, res: { value: new THREE.Vector2(1, 1) },
-        cor: { value: new THREE.Color(0x04070b) }, op: { value: 0.9 }, raio: { value: 1 }
+        tId: { value: rtId.texture }, tProf: { value: rtId.depthTexture },
+        res: { value: new THREE.Vector2(1, 1) }, near: { value: 0.1 }, far: { value: 100 },
+        cor: { value: new THREE.Color(0x04070b) }, op: { value: 0.9 }, raio: { value: 1 }, limiar: { value: 0.012 }
       },
       vertexShader: 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
-      fragmentShader: 'uniform sampler2D tId; uniform vec2 res; uniform vec3 cor; uniform float op; uniform float raio;' +
-        'float idDe(vec2 uv){ vec4 t = texture2D(tId, uv); return floor(t.r * 255.0 + 0.5) + 256.0 * floor(t.g * 255.0 + 0.5); }' +
+      // Contorno onde há fundo ou degrau de profundidade, e não onde só muda o número
+      // da peça: peças que se sobrepõem na mesma superfície (tubo dentro de conexão)
+      // alternam de número em manchas e geravam emendas falsas.
+      fragmentShader: 'uniform sampler2D tId; uniform sampler2D tProf; uniform vec2 res;' +
+        'uniform float near; uniform float far; uniform vec3 cor; uniform float op; uniform float raio; uniform float limiar;' +
+        'float temPeca(vec2 uv){ vec4 t = texture2D(tId, uv); return t.r + t.g; }' +          // 0 = fundo
+        'float profLinear(vec2 uv){ float z = texture2D(tProf, uv).x * 2.0 - 1.0;' +
+        '  return (2.0 * near * far) / (far + near - z * (far - near)); }' +
         'void main(){' +
-        '  vec2 uv = gl_FragCoord.xy / res; float c = idDe(uv);' +
-        '  if (c < 0.5) discard;' +
+        '  vec2 uv = gl_FragCoord.xy / res;' +
+        '  if (temPeca(uv) < 0.001) discard;' +
+        '  float zc = profLinear(uv);' +
         '  vec2 px = raio / res; bool borda = false;' +
         '  for (int k = 0; k < 8; k++) {' +
         '    float a = float(k) * 0.785398;' +                       // 8 direções
-        '    if (idDe(uv + vec2(cos(a), sin(a)) * px) < c - 0.5) borda = true;' +
+        '    vec2 q = uv + vec2(cos(a), sin(a)) * px;' +
+        '    if (temPeca(q) < 0.001) borda = true;' +                 // silhueta contra o fundo
+        '    else if (profLinear(q) < zc * (1.0 - limiar)) borda = true;' +   // vizinho bem mais perto: esta é a de trás
         '  }' +
-        '  if (!borda) discard;' +                                    // um lado só: a linha não dobra
+        '  if (!borda) discard;' +
         '  gl_FragColor = vec4(cor, op); }'
     });
     cenaContorno = new THREE.Scene();
@@ -689,6 +714,7 @@ function desenharContorno(foco) {
   meshFantasma.visible = false; if (grade) grade.visible = false;
   if (foco) meshContexto.visible = false;      // com seleção, só o destaque leva contorno
 
+  matContorno.uniforms.near.value = cam.near; matContorno.uniforms.far.value = cam.far;
   scene.overrideMaterial = matId;
   renderer.setRenderTarget(rtId);
   renderer.setClearColor(0x000000, 0);
@@ -1285,7 +1311,58 @@ function atualizarSelecao() {
   pintarMalha(geomConj, meshConj, S.conj ? S.conj.ids : []);
 }
 
+/* ---- ocultar peças pelo visor ----
+   Com uma peça (ou várias) selecionada, a barra oferece "Ocultar". Depois do
+   primeiro uso o modo de ocultação fica ativo: cada clique seguinte seleciona outra
+   peça para ocultar, até "Finalizar ocultações". As ocultas continuam ocultas;
+   "Mostrar tudo" as traz de volta. */
+function contarOcultas() {
+  let n = 0;
+  S.model.elements.forEach((e, i) => { if (e.iCount && !S.visivelEl[i]) n++; });
+  return n;
+}
+
+function ocultarSelecao() {
+  const ids = idsDestacados();
+  if (!ids || !ids.size) return;
+  for (const i of ids) S.visivelEl[i] = 0;
+  S.ocultando = true;
+  limparSelecao();            // segue no modo: o próximo clique escolhe a próxima peça
+  renderTabs();
+}
+
+function finalizarOcultacoes() {
+  S.ocultando = false;
+  limparSelecao();
+  renderTabs();
+}
+
+function atualizarBarraOcultar() {
+  const bar = $('#barraOcultar'); if (!bar) return;
+  const nOcultas = contarOcultas();
+  if (S.ocultando && !nOcultas) S.ocultando = false;      // "Mostrar tudo" encerra o modo
+  const ids = idsDestacados();
+  const nSel = ids ? ids.size : 0;
+  bar.innerHTML = '';
+  if (!nSel && !S.ocultando) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  if (nSel) {
+    const b = el('button', 'btn prim', nSel === 1 ? 'Ocultar peça' : 'Ocultar ' + nSel + ' peças');
+    b.title = 'Tira do visor e das tabelas a seleção atual';
+    b.onclick = ocultarSelecao;
+    bar.appendChild(b);
+  }
+  if (S.ocultando) {
+    bar.appendChild(el('span', 'cnt', nOcultas + (nOcultas === 1 ? ' peça oculta' : ' peças ocultas')));
+    const f = el('button', 'btn', 'Finalizar ocultações');
+    f.title = 'Sai do modo de ocultação. As peças ocultas continuam ocultas; "Mostrar tudo" traz de volta.';
+    f.onclick = finalizarOcultacoes;
+    bar.appendChild(f);
+  }
+}
+
 function atualizarHud() {
+  atualizarBarraOcultar();
   const hud = $('#hud'); hud.innerHTML = '';
   const vis = S.model.elements.reduce((s, _, i) => s + (elementoVisivel(i) ? 1 : 0), 0);
   const q = quantitativos(S.model, (e) => elementoVisivel(e.i));

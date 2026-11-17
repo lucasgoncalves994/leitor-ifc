@@ -120,14 +120,24 @@ a união e o corpo eram selecionados e contados juntos.
   rolagem automática. Shift + clique **parado** (menos de 5 px) soma à seleção;
   com movimento é deslocamento.
 
-- **Contorno por peça, em tela** (`montarContorno`, `desenharContorno`). Cada
-  vértice leva o número da peça (`eid`); um passo extra desenha a cena num alvo
-  com esse número no lugar da cor, e um quadro cheio pinta o pixel cujo vizinho
-  tem número menor (um lado só, ~2 px). Separa tubo de conexão mesmo com a mesma
-  cor, e não depende das normais (as faces facetadas têm normais planas, o que
-  quebraria o método do casco invertido). Com seleção ativa, só o destaque leva
-  contorno; o contexto esmaecido não. Checkbox "Contorno nas peças"; cores em
-  `TEMA3D.contorno`. Custa um passo de desenho a mais por quadro.
+- **Contorno por peça, em tela** (`montarContorno`, `desenharContorno`). Um passo
+  extra desenha a cena num alvo (número da peça + textura de profundidade) e um
+  quadro cheio pinta o pixel onde o vizinho é fundo (silhueta) ou está bem mais
+  perto (`limiar` = 1,2% da profundidade; a peça de trás leva a linha). Não
+  depende das normais (as faces facetadas têm normais planas, o que quebraria o
+  método do casco invertido). Com seleção ativa, só o destaque leva contorno.
+  Checkbox "Contorno nas peças"; cores em `TEMA3D.contorno`.
+  **Não usar mudança de número da peça como critério de borda:** tubo e conexão
+  se sobrepõem na mesma superfície e o número alterna em manchas, gerando
+  emendas falsas dentro das conexões (foi a 1ª versão, rejeitada).
+
+- **Barra de ocultação no visor** (`#barraOcultar`, `atualizarBarraOcultar`).
+  Com peça(s) selecionada(s) aparece "Ocultar peça / N peças"; o primeiro uso liga
+  o modo de ocultação (`S.ocultando`): a seleção é limpa, a barra passa a mostrar
+  o contador e "Finalizar ocultações", e o clique seguinte escolhe outra peça. Finalizar
+  só sai do modo; as ocultas continuam ocultas e "Mostrar tudo" as devolve (e
+  encerra o modo sozinho). É atualizada por `atualizarHud`, que toda mudança de
+  seleção ou visibilidade já chama.
 
 - **Tabelas: Shift+clique seleciona intervalo.** `cliqueLinha` guarda a última
   linha clicada como âncora (`ancoraTabela`) e seleciona tudo entre ela e a
