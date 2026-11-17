@@ -3,16 +3,23 @@
 Leitor de IFC em navegador, escrito do zero para o modelo hidráulico da piscina
 do Art Stay (Unique). Não usa nenhuma biblioteca de IFC: o parser é próprio.
 
-Estudo de caso: `ARTST-CHI-PIS-EX-0001-MOD-PISCINA_COMPLETA-R00.ifc`
-— IFC2X3, exportado pelo Revit 2024 (PTB), unidade **centímetro**,
-722 elementos, 507.828 triângulos, 641,10 m de tubo.
+Estudo de caso: `ARTST-CHI-PIS-EX-0001-MOD-PISCINA_COMPLETA-R01.ifc`
+(`modelo.json`) — IFC2X3, exportado pelo Revit 2024 (PTB, 16/11/2026), unidade
+**centímetro**, 670 elementos (688 com as 18 uniões separadas), 495.335 triângulos,
+382,47 m de tubo.
+O **R00** (722 elementos, 507.828 triângulos, 641,10 m de tubo) fica em
+`modelo-R00.json`, como referência (para usá-lo: renomear para `modelo.json`).
+A diferença de tubo entre as revisões está quase toda no sistema elétrico DN25
+(340,08 m no R00, 74,87 m no R01).
 
 ## O problema que originou o projeto
 
-O Revit exportou `Pset_FlowSegmentPipeSegment` contendo **apenas `Length`**.
-Não existe `NominalDiameter` em lugar nenhum do arquivo. Abrir o IFC em qualquer
-visualizador não mostra diâmetro nem tipo de tubo. O leitor reconstrói esses
-dados a partir do próprio arquivo.
+No R00 o Revit exportou `Pset_FlowSegmentPipeSegment` contendo **apenas `Length`**:
+não existia `NominalDiameter` em lugar nenhum. O leitor reconstrói o diâmetro a
+partir do próprio arquivo (geometria e portas). O **R01** já traz os parâmetros do
+Revit em conjuntos próprios (`Mecânica`, `Cotas`, `Dados de identidade`, `Outros`,
+`Resultados da análise`...), e o leitor os usa antes da reconstrução, que ficou
+como reserva e como conferência.
 
 ## Arquitetura
 
@@ -44,19 +51,43 @@ Três camadas, carregadas como scripts clássicos (sem módulos), nesta ordem:
 
 3. **`index.html`** — interface, visor three.js e tabelas.
 
-## Como o diâmetro é reconstruído (ordem de prioridade)
+## De onde vem o diâmetro (ordem de prioridade)
 
-1. **Perfil circular da geometria** — raio × 2 do `IfcCircleProfileDef`.
+1. **Parâmetros do Revit (R01)** — `Cotas.Tamanho` (`Ø75-Ø60-Ø60`, em mm) dá a
+   bitola de cada boca: reduções e tês ficam `75 × 60` direto do arquivo, e
+   `Ø50-Ø50` numa válvula é DN50. Sem `Tamanho`: `Mecânica.Diâmetro`, `Cotas.DN` e
+   `Outros.Diâmetro Nominal Máximo` (esses em cm: 7.5 = DN75, multiplicar por
+   `lengthScale`). `dnParam` guarda qual parâmetro foi usado. 609 elementos.
+   Peça com `Tamanho` não passa pelo grafo de portas (que errava: válvula
+   `Ø50-Ø50` saía `60 × 50`, bucha `Ø60-Ø50` saía `75 × 60 × 50`).
+2. **Perfil circular da geometria** — raio × 2 do `IfcCircleProfileDef`.
    Só vale para categorias lineares (ver `PERFIL_E_BITOLA`): num dispositivo
-   o primeiro sólido é parte do corpo, não a conexão. 382 elementos.
-2. **Grafo de portas** — propagação em até 4 passadas a partir dos tubos
-   ligados a cada `IfcDistributionPort`. É isso que dá bitola às conexões e
-   faz reduções e tês aparecerem como `75 × 60`. 329 elementos.
-3. **Propriedade do IFC** — `NominalDiameter` e similares, se existirem.
-4. **Número no nome do tipo** — só aceita quando seguido de `mm`. 5 elementos.
+   o primeiro sólido é parte do corpo, não a conexão. No R01 vira conferência
+   (`dnGeom`): bate com o parâmetro nos 355 elementos que têm as duas fontes.
+3. **Grafo de portas** — propagação em até 4 passadas a partir dos tubos
+   ligados a cada `IfcDistributionPort`. É a única fonte para o R00 (329
+   elementos) e a reserva no R01 (68).
+4. **Propriedade do IFC** — `NominalDiameter` e similares, se existirem.
+5. **Número no nome do tipo** — só aceita quando seguido de `mm`.
 
-Cada peça guarda `dnFonte`, e o painel mostra a origem. Não inventar diâmetro:
-6 elementos ficam sem (2 pisos, 2 drenos, torneira, Smartpool) e assim devem ficar.
+Cada peça guarda `dnFonte`, e o painel mostra a origem (e se confere com a
+geometria). Não inventar diâmetro: ficam sem (2 pisos, drenos, torneira, Smartpool) e assim devem ficar.
+
+### Outros parâmetros do Revit usados (R01)
+
+Extraídos em `buildIfcModel` (funções `getParam`, `textoParam`, `numParam`):
+`marca`, `comentarios`, `descricao` ("Descrição do Material"; o texto
+"inexistente" vira vazio), `nomeSistema`, `materialSistema`, `hmtPa`, `vazaoLs`.
+- `descricao` entra na chave de agrupamento de `quantitativos`: separa joelho 45°
+  de joelho 90° dentro do mesmo tipo. As tabelas de peças ganham a coluna
+  "Descrição" e a de elementos a coluna "Marca" **só quando o IFC as traz** (o R00
+  continua igual).
+- Unidades: números vêm na unidade do modelo (cm). `VAZÃO` está em L/s (5,5556 =
+  20 m³/h). `HMT` parece estar em Pa (10,46 m.c.a. numa bomba de piscina); a
+  unidade **não está confirmada** e o painel avisa "presumido".
+- `Mecânica – Vazão` (vazão, velocidade, queda de pressão dos tubos) vem **zerada**
+  no R01: a análise não foi calculada na exportação. Não exibir.
+- As uniões separadas (`sintetico`) não herdam marca, descrição, vazão nem HMT.
 
 **Conferência de referência:** o comprimento calculado na geometria bate com a
 propriedade `Length` do arquivo com erro de 4,4 × 10⁻¹⁶ m. Se mexer na cadeia de

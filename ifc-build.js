@@ -52,7 +52,7 @@ const FONTE_DN = {
   geom: 'geometria (perfil circular)',
   geomRet: 'geometria (perfil retangular)',
   porta: 'porta conectada',
-  pset: 'propriedade do IFC',
+  pset: 'parâmetro do IFC',
   nome: 'nome do tipo'
 };
 
@@ -127,6 +127,35 @@ function fatiaGeometria(geo, folhas) {
     for (let i = l.i0; i < l.i1; i++) idx.push(geo.idx[i] + desloc);
   }
   return pos.length ? { pos, idx } : null;
+}
+
+/* ---- parâmetros do Revit exportados no IFC (a partir do R01) ----
+   Vêm em conjuntos com o nome do Revit (Mecânica, Cotas, Dados de identidade...). Os
+   números ficam na unidade do modelo (centímetro no estudo de caso): Diâmetro 7.5 = DN75. */
+const PARAMS_DN = [['Mecânica', 'Diâmetro'], ['Cotas', 'DN'], ['Outros', 'Diâmetro Nominal Máximo']];
+
+function getParam(props, conj, nome) {
+  const c = props[conj];
+  return c && c[nome] ? c[nome] : null;
+}
+
+// texto do parâmetro, ou '' quando falta ou o projetista escreveu "inexistente"
+function textoParam(props, conj, nome) {
+  const p = getParam(props, conj, nome);
+  const v = p && p.value != null ? String(p.value).trim() : '';
+  return (!v || v === '$' || /^inexistente$/i.test(v)) ? '' : v;
+}
+
+function numParam(props, conj, nome) {
+  const p = getParam(props, conj, nome);
+  return p && isFinite(p.num) ? p.num : null;
+}
+
+// "Ø75-Ø60-Ø60" -> [75, 60] (bitolas distintas, da maior para a menor, em mm)
+function dnPorTamanho(txt) {
+  const nums = String(txt == null ? '' : txt).match(/\d+(?:[.,]\d+)?/g) || [];
+  const ds = nums.map(s => Math.round(parseFloat(s.replace(',', '.')))).filter(d => d >= 10 && d <= 600);
+  return [...new Set(ds)].sort((a, b) => b - a);
 }
 
 function splitFamilyType(s) {
@@ -287,6 +316,36 @@ async function buildIfcModel(text, onProgress) {
         el.dn = Math.round(v); el.dnFonte = 'pset';
       }
     }
+
+    // ---- parâmetros do Revit: maior prioridade para o diâmetro ----
+    // "Tamanho" (Ø75-Ø60-Ø60) dá a bitola de cada boca de reduções e tês; sem ele, usa
+    // Diâmetro / DN / Diâmetro Nominal Máximo. A geometria fica como conferência.
+    el.dnGeom = el.dnFonte === 'geom' ? el.dn : 0;
+    const tam = getParam(props, 'Cotas', 'Tamanho');
+    const dnsTam = tam ? dnPorTamanho(tam.value) : [];
+    let dnPar = 0, nomePar = '';
+    if (dnsTam.length) { dnPar = dnsTam[0]; nomePar = 'Tamanho'; }
+    else {
+      for (const [conj, nome] of PARAMS_DN) {
+        const v = numParam(props, conj, nome);
+        if (v > 0) { dnPar = Math.round(v * m.lengthScale * 1000); nomePar = nome; break; }
+      }
+    }
+    if (dnPar) {
+      el.dn = dnPar; el.dnFonte = 'pset'; el.dnParam = nomePar;
+      if (dnsTam.length > 1) el.dnPortas = dnsTam;
+    }
+
+    // ---- identificação (Revit) ----
+    el.marca = textoParam(props, 'Dados de identidade', 'Marca');
+    el.comentarios = textoParam(props, 'Dados de identidade', 'Comentários');
+    el.descricao = textoParam(props, 'Dados de identidade', 'Descrição do Material');
+    el.nomeSistema = textoParam(props, 'Mecânica', 'Nome do sistema');
+    el.materialSistema = textoParam(props, 'Mecânica', 'Material');
+    el.hmtPa = numParam(props, 'Mecânica', 'HMT');                 // altura manométrica (Pa presumido)
+    el.vazaoLs = numParam(props, 'Mecânica', 'VAZÃO');             // vazão da bomba (L/s: 5,5556 = 20 m³/h)
+    if (el.vazaoLs == null) el.vazaoLs = numParam(props, 'Resultados da análise', 'Vazão de projeto L/s');
+
     elements.push(el);
     byId.set(id, el);
     if ((k & 63) === 0) await report(0.34 + k / ids.length * 0.18, 'Extraindo parâmetros dos elementos');
@@ -317,7 +376,7 @@ async function buildIfcModel(text, onProgress) {
   }
   // registra os DN das portas também para quem já tinha DN (reduções, tês)
   for (const el of elements) {
-    if (el.dnPortas.length) continue;
+    if (el.dnPortas.length || el.dnParam === 'Tamanho') continue;   // "Tamanho" já é a bitola exata
     const ds = vizinhos(el).map(o => o.dn).filter(d => d > 0);
     const set = [...new Set(el.dn ? [el.dn, ...ds] : ds)].sort((x, y) => y - x);
     if (set.length > 1) el.dnPortas = set;
@@ -358,7 +417,9 @@ async function buildIfcModel(text, onProgress) {
             objType: 'União:' + el.familia,
             tag: '',
             tipoIfc: '', ifcType: el.ifcType,
-            dn: el.dn, dnFonte: el.dn ? 'porta' : '', dnPortas: [],
+            dn: el.dn, dnFonte: el.dn ? 'porta' : '', dnPortas: [], dnParam: '', dnGeom: 0,
+            // a união não é o equipamento: não herda marca, descrição, vazão nem HMT dele
+            marca: '', comentarios: '', descricao: '', hmtPa: null, vazaoLs: null,
             comprimento: 0, eixo: null, linear: false,
             partes: undefined, parteDe: el.i, sintetico: true
           });
@@ -458,10 +519,13 @@ function quantitativos(model, filtro) {
   for (const e of ativos) {
     if (ehLin(e)) continue;
     const bitola = e.dnPortas.length > 1 ? e.dnPortas.join(' × ') : (e.dn ? String(e.dn) : '—');
+    // "Descrição do Material" (Revit) separa, por exemplo, joelho 45° de joelho 90°
+    // dentro do mesmo tipo; sem ela (R00) o agrupamento é o de antes.
+    const descricao = e.descricao || '';
     const base = {
-      categoria: e.categoria, familia: e.familia, tipo: e.tipo, objType: e.objType, bitola
+      categoria: e.categoria, familia: e.familia, tipo: e.tipo, objType: e.objType, bitola, descricao
     };
-    const k = e.objType + '\u0000' + bitola;
+    const k = e.objType + '\u0000' + bitola + '\u0000' + descricao;
     const cur = pecas.get(k) || Object.assign({ n: 0, ids: [] }, base);
     cur.n++; cur.ids.push(e.i);
     pecas.set(k, cur);
@@ -478,9 +542,11 @@ function quantitativos(model, filtro) {
     porDN: [...porDN.values()].sort((a, b) => a.dn - b.dn),
     porSistemaDN: [...porSistemaDN.values()].sort((a, b) => a.sistema.localeCompare(b.sistema) || a.dn - b.dn),
     pecas: [...pecas.values()].sort((a, b) =>
-      a.categoria.localeCompare(b.categoria) || a.objType.localeCompare(b.objType) || a.bitola.localeCompare(b.bitola)),
+      a.categoria.localeCompare(b.categoria) || a.objType.localeCompare(b.objType) ||
+      a.bitola.localeCompare(b.bitola) || a.descricao.localeCompare(b.descricao, 'pt-BR', { numeric: true })),
     pecasPorSistema: [...pecasPorSistema.values()].sort((a, b) =>
       a.sistema.localeCompare(b.sistema, 'pt-BR') || a.categoria.localeCompare(b.categoria) ||
-      a.objType.localeCompare(b.objType) || a.bitola.localeCompare(b.bitola, 'pt-BR', { numeric: true }))
+      a.objType.localeCompare(b.objType) || a.bitola.localeCompare(b.bitola, 'pt-BR', { numeric: true }) ||
+      a.descricao.localeCompare(b.descricao, 'pt-BR', { numeric: true }))
   };
 }

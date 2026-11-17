@@ -2,7 +2,8 @@
 
 Visualizador de IFC que roda no navegador, sem instalar nada. Lê o arquivo IFC
 direto (parser próprio em JavaScript), mostra o modelo em 3D e extrai os
-parâmetros que o Revit não exportou.
+parâmetros de cada elemento: diâmetro, marca, descrição, sistema, vazão e HMT
+(do próprio IFC quando o Revit os exporta; senão, reconstruídos pela geometria).
 
 ## Rodar
 
@@ -33,6 +34,7 @@ Esse arquivo abre com duplo clique, sem servidor e sem internet.
 | `ifc-core.js` | Parser STEP/IFC e extração de geometria |
 | `ifc-build.js` | Camada de engenharia: diâmetro, tipo, sistema, quantitativos |
 | `three.min.js` | three.js r149 (UMD), fixado como arquivo próprio |
-| `modelo.json` | IFC comprimido em gzip + base64 |
+| `modelo.json` | IFC embutido (hoje a revisão R01), comprimido em gzip + base64 |
+| `modelo-R00.json` | Revisão R00, guardada como referência (renomeie para `modelo.json` para usá-la) |
 | `build_standalone.py` | Gera o HTML de arquivo único |
 | `preparar_modelo.py` | Converte um .ifc em `modelo.json` |

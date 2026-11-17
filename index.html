@@ -1665,7 +1665,10 @@ function detalheElemento(p, e, compacto) {
   else if (e.dn) dnTxt = e.dn + ' mm';
   else if (e.largura) dnTxt = fmt(e.largura, 0) + ' × ' + fmt(e.altura, 0) + ' mm';
   kp1.appendChild(el('div', 'v', dnTxt));
-  kp1.appendChild(el('div', 'src', e.dnFonte ? 'origem: ' + FONTE_DN[e.dnFonte] : 'o IFC não traz diâmetro para esta peça'));
+  let origem = e.dnFonte ? 'origem: ' + FONTE_DN[e.dnFonte] : 'o IFC não traz diâmetro para esta peça';
+  if (e.dnParam) origem += ' "' + e.dnParam + '"';
+  if (e.dnFonte === 'pset' && e.dnGeom) origem += e.dnGeom === e.dn ? ' · confere com a geometria' : ' · a geometria dá ' + e.dnGeom + ' mm';
+  kp1.appendChild(el('div', 'src', origem));
   kps.appendChild(kp1);
 
   if (!compacto) {
@@ -1698,7 +1701,17 @@ function detalheElemento(p, e, compacto) {
     linhaProp(dl, 'Perfil', e.perfil);
   }
   linhaProp(dl, 'ID no Revit', e.tag);
-  if (!compacto) linhaProp(dl, 'GUID', e.guid);
+  if (!compacto) {
+    // parâmetros do Revit exportados no IFC (R01 em diante); somem sozinhos quando não existem
+    linhaProp(dl, 'Marca', e.marca);
+    linhaProp(dl, 'Comentários', e.comentarios);
+    linhaProp(dl, 'Nome do sistema', e.nomeSistema);
+    linhaProp(dl, 'Material do sistema', e.materialSistema);
+    linhaProp(dl, 'Descrição', e.descricao);
+    if (e.vazaoLs != null) linhaProp(dl, 'Vazão', fmt(e.vazaoLs, 2) + ' L/s · ' + fmt(e.vazaoLs * 3.6, 2) + ' m³/h');
+    if (e.hmtPa != null) linhaProp(dl, 'Altura manométrica (HMT)', fmt(e.hmtPa / 9806.65, 2) + ' m.c.a. · ' + fmt(e.hmtPa / 1000, 1) + ' kPa (valor do IFC em Pa, presumido)');
+    linhaProp(dl, 'GUID', e.guid);
+  }
   p.appendChild(dl);
 
   if (!compacto) {
@@ -1874,15 +1887,19 @@ function renderSistemas(Q) {
 
 function renderPecas(Q) {
   const p = $('#pane-pecas'); p.innerHTML = '';
+  const comDesc = Q.pecas.some(r => r.descricao);        // só o IFC com "Descrição do Material"
   p.appendChild(Object.assign(el('p', 'tablehint'),
-    { textContent: 'Clique numa linha para destacar essas peças no 3D e percorrê-las uma a uma. A bitola vem dos diâmetros dos tubos ligados às portas de cada peça no IFC — por isso reduções e tês aparecem com duas ou três medidas.' }));
+    { textContent: 'Clique numa linha para destacar essas peças no 3D e percorrê-las uma a uma. A bitola vem do parâmetro "Tamanho" do IFC quando existe; ' +
+      'senão, dos diâmetros dos tubos ligados às portas da peça (por isso reduções e tês aparecem com duas ou três medidas).' +
+      (comDesc ? ' A descrição é a "Descrição do Material" do Revit.' : '') }));
   const linhas = Q.pecas.map(r => ({
-    _els: r.ids, _chave: 'pc:' + r.objType + ':' + r.bitola,
-    _rotulo: r.tipo + ' · ' + (r.bitola === '—' ? 'sem bitola' : r.bitola + ' mm'),
-    c: [r.categoria, r.familia, r.tipo, r.bitola, r.n]
+    _els: r.ids, _chave: 'pc:' + r.objType + ':' + r.bitola + ':' + r.descricao,
+    _rotulo: (r.descricao || r.tipo) + ' · ' + (r.bitola === '—' ? 'sem bitola' : r.bitola + ' mm'),
+    c: [r.categoria, r.familia, r.tipo, r.bitola].concat(comDesc ? [r.descricao] : [], [r.n])
   }));
-  linhas.push({ _tot: 1, c: ['Total', '', '', '', Q.pecas.reduce((s, r) => s + r.n, 0)] });
-  p.appendChild(tabela([{ t: 'Categoria' }, { t: 'Família' }, { t: 'Tipo' }, { t: 'Bitola (mm)' }, { t: 'Quantidade', n: 1 }], linhas));
+  linhas.push({ _tot: 1, c: ['Total', '', '', ''].concat(comDesc ? [''] : [], [Q.pecas.reduce((s, r) => s + r.n, 0)]) });
+  p.appendChild(tabela([{ t: 'Categoria' }, { t: 'Família' }, { t: 'Tipo' }, { t: 'Bitola (mm)' }]
+    .concat(comDesc ? [{ t: 'Descrição' }] : [], [{ t: 'Quantidade', n: 1 }]), linhas));
 }
 
 function renderPecasSistema(Q) {
@@ -1891,27 +1908,29 @@ function renderPecasSistema(Q) {
     { textContent: 'As mesmas conexões, registros e dispositivos da aba anterior, separados pela rede a que o IFC os vincula. ' +
       'Cada rede fecha com o seu subtotal. Clique numa linha para destacar as peças no 3D; Shift+clique soma à seleção.' }));
 
+  const comDesc = Q.pecasPorSistema.some(r => r.descricao);
+  const extra = comDesc ? [''] : [];
   const linhas = [];
   let sistemaAtual = null, subtotal = 0;
   const fechaBloco = () => {
     if (sistemaAtual !== null)
-      linhas.push({ _tot: 1, c: ['Subtotal · ' + sistemaAtual, '', '', '', subtotal] });
+      linhas.push({ _tot: 1, c: ['Subtotal · ' + sistemaAtual, '', '', ''].concat(extra, [subtotal]) });
   };
   for (const r of Q.pecasPorSistema) {
     if (r.sistema !== sistemaAtual) { fechaBloco(); sistemaAtual = r.sistema; subtotal = 0; }
     subtotal += r.n;
     linhas.push({
-      _els: r.ids, _chave: 'ps:' + r.sistema + ':' + r.objType + ':' + r.bitola,
-      _rotulo: r.tipo + ' · ' + (r.bitola === '—' ? 'sem bitola' : r.bitola + ' mm') + ' · ' + r.sistema,
-      c: [r.sistema, r.categoria, r.tipo, r.bitola, r.n]
+      _els: r.ids, _chave: 'ps:' + r.sistema + ':' + r.objType + ':' + r.bitola + ':' + r.descricao,
+      _rotulo: (r.descricao || r.tipo) + ' · ' + (r.bitola === '—' ? 'sem bitola' : r.bitola + ' mm') + ' · ' + r.sistema,
+      c: [r.sistema, r.categoria, r.tipo, r.bitola].concat(comDesc ? [r.descricao] : [], [r.n])
     });
   }
   fechaBloco();
   const total = Q.pecasPorSistema.reduce((s, r) => s + r.n, 0);
-  linhas.push({ _tot: 1, c: ['Total geral', '', '', '', total] });
+  linhas.push({ _tot: 1, c: ['Total geral', '', '', ''].concat(extra, [total]) });
 
-  p.appendChild(tabela([{ t: 'Sistema' }, { t: 'Categoria' }, { t: 'Tipo' },
-  { t: 'Bitola (mm)' }, { t: 'Quantidade', n: 1 }], linhas));
+  p.appendChild(tabela([{ t: 'Sistema' }, { t: 'Categoria' }, { t: 'Tipo' }, { t: 'Bitola (mm)' }]
+    .concat(comDesc ? [{ t: 'Descrição' }] : [], [{ t: 'Quantidade', n: 1 }]), linhas));
 }
 
 function renderElementos() {
@@ -1941,20 +1960,22 @@ function renderCorpoElementos() {
     if (!elementoVisivel(e.i)) return false;
     if (!q) return true;
     return (e.objType + ' ' + e.sistemaClasse + ' ' + e.categoria + ' ' + e.tag +
-      ' DN' + e.dn + ' ' + e.dn + ' ' + e.pavimento + ' ' + e.material + ' ' + e.fabricante)
+      ' DN' + e.dn + ' ' + e.dn + ' ' + e.pavimento + ' ' + e.material + ' ' + e.fabricante + ' ' +
+      (e.marca || '') + ' ' + (e.comentarios || '') + ' ' + (e.nomeSistema || '') + ' ' + (e.descricao || ''))
       .toLowerCase().includes(q);
   });
   const corte = els.slice(0, 600);
   const cnt = $('#elCount');
   if (cnt) cnt.textContent = els.length + ' elementos' + (els.length > 600 ? ' — mostrando os 600 primeiros' : '');
+  const comMarca = S.model.elements.some(e => e.marca);   // só o IFC com "Marca" (Revit)
   const linhas = corte.map(e => ({
     _el: e.i,
-    c: [e.categoria, e.tipo || e.familia, pill(e.dn), e.sistemaClasse,
-    ehLinear(e) && e.comprimento ? fmt(e.comprimento, 3) : '', e.tag]
+    c: [e.categoria, e.tipo || e.familia, pill(e.dn), e.sistemaClasse]
+      .concat(comMarca ? [e.marca || ''] : [], [ehLinear(e) && e.comprimento ? fmt(e.comprimento, 3) : '', e.tag])
   }));
   alvo.innerHTML = '';
-  alvo.appendChild(tabela([{ t: 'Categoria' }, { t: 'Tipo' }, { t: 'Diâmetro' }, { t: 'Sistema' },
-  { t: 'Comprimento (m)', n: 1 }, { t: 'ID no Revit', n: 1 }], linhas));
+  alvo.appendChild(tabela([{ t: 'Categoria' }, { t: 'Tipo' }, { t: 'Diâmetro' }, { t: 'Sistema' }]
+    .concat(comMarca ? [{ t: 'Marca' }] : [], [{ t: 'Comprimento (m)', n: 1 }, { t: 'ID no Revit', n: 1 }]), linhas));
   marcarLinha();
 }
 
