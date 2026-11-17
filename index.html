@@ -683,15 +683,20 @@ function montarContorno(M) {
         '  vec2 uv = gl_FragCoord.xy / res;' +
         '  if (temPeca(uv) < 0.001) discard;' +
         '  float zc = profLinear(uv);' +
-        '  vec2 px = raio / res; bool borda = false;' +
-        '  for (int k = 0; k < 8; k++) {' +
-        '    float a = float(k) * 0.785398;' +                       // 8 direções
-        '    vec2 q = uv + vec2(cos(a), sin(a)) * px;' +
-        '    if (temPeca(q) < 0.001) borda = true;' +                 // silhueta contra o fundo
-        '    else if (profLinear(q) < zc * (1.0 - limiar)) borda = true;' +   // vizinho bem mais perto: esta é a de trás
+        '  vec2 px = raio / res; float fora = 0.0;' +
+        // 16 amostras em 2 anéis (0,9 e 1,9 px), o segundo girado meio passo. A fração
+        // delas que cai no fundo ou numa peça bem mais perto vira a transparência da
+        // linha: em vez de ligar/desligar por pixel (serrilhado), ela cai suavemente.
+        '  for (int k = 0; k < 16; k++) {' +
+        '    float kk = float(k); bool anel2 = kk >= 8.0;' +
+        '    float a = mod(kk, 8.0) * 0.785398 + (anel2 ? 0.3927 : 0.0);' +
+        '    vec2 q = uv + vec2(cos(a), sin(a)) * px * (anel2 ? 1.9 : 0.9);' +
+        '    if (temPeca(q) < 0.001) fora += 1.0;' +                  // silhueta contra o fundo
+        '    else if (profLinear(q) < zc * (1.0 - limiar)) fora += 1.0;' +   // vizinho bem mais perto: esta é a de trás
         '  }' +
-        '  if (!borda) discard;' +
-        '  gl_FragColor = vec4(cor, op); }'
+        '  float forca = smoothstep(0.0, 0.5, fora / 16.0);' +
+        '  if (forca < 0.02) discard;' +
+        '  gl_FragColor = vec4(cor, op * forca); }'
     });
     cenaContorno = new THREE.Scene();
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matContorno);
@@ -707,7 +712,7 @@ function ajustarContorno() {
   const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
   rtId.setSize(sz.x, sz.y);
   matContorno.uniforms.res.value.set(sz.x, sz.y);
-  matContorno.uniforms.raio.value = 1.5 * Math.max(1, renderer.getPixelRatio());   // ~2 px de linha
+  matContorno.uniforms.raio.value = Math.max(1, renderer.getPixelRatio());   // 1 px do dispositivo; os anéis do shader usam 0,9 e 1,9 desse valor
 }
 
 /* O contorno custa um passo de desenho a mais (no modelo inteiro, quando não há

@@ -134,6 +134,10 @@ a união e o corpo eram selecionados e contados juntos.
   depende das normais (as faces facetadas têm normais planas, o que quebraria o
   método do casco invertido). Com seleção ativa, só o destaque leva contorno.
   Checkbox "Contorno nas peças"; cores em `TEMA3D.contorno`.
+  **Serrilhado:** o alvo de identificadores não tem MSAA (misturar números de peça
+  não faz sentido), então a linha não é decidida por pixel: o shader amostra 16
+  pontos em 2 anéis (0,9 e 1,9 px) e usa a fração que cai fora da peça como
+  transparência (`smoothstep`), o que dá bordas graduadas.
   **Desligado durante o movimento da câmera:** o passo extra redesenha o modelo
   inteiro (sem seleção custou ~37% dos quadros/s num teste parado), então
   `desenharContorno` é pulado por `ATRASO_CONTORNO` (200 ms) depois do último
