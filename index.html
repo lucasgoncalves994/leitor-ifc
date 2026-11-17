@@ -596,6 +596,7 @@ async function montar(texto) {
   const M = await buildIfcModel(texto, progresso);
   await progresso(0.97, 'Preparando o visor');
   S.model = M;
+  aplicarEdicoesSalvas(M);
   S.visivelEl = new Uint8Array(M.elements.length).fill(1);
   S.ocultando = false; ocultasDaSessao.clear();
   S.sel = -1;
@@ -1596,6 +1597,8 @@ function painelConjunto(p) {
     detalheElemento(sub, M.elements[S.sel], true);
   }
 
+  p.appendChild(editorEdicao(c.ids));
+
   const dica = el('p', 'empty');
   dica.style.marginTop = '10px';
   dica.innerHTML = '<b>Shift+clique</b> soma peças à seleção; repetir no mesmo item tira ele. ' +
@@ -1654,6 +1657,92 @@ function painelElemento() {
   detalheElemento(p, S.model.elements[S.sel], false);
 }
 
+/* ---- Edição manual de nome, sistema e diâmetro ----
+   As edições ficam no navegador (localStorage), por GUID da peça, e valem sobre qualquer
+   leitura do IFC: o valor original é guardado em e.orig e volta com "Restaurar". */
+const EDIC_KEY = 'leitor-ifc-edicoes';
+let edicoes = {};
+try { edicoes = JSON.parse(localStorage.getItem(EDIC_KEY) || '{}') || {}; } catch (err) { edicoes = {}; }
+const salvarEdicoes = () => { try { localStorage.setItem(EDIC_KEY, JSON.stringify(edicoes)); } catch (err) { } };
+const nomeEl = (e) => e.nomeEd || e.tipo || e.familia;
+
+function aplicarEdicao(e) {
+  if (!e.orig) e.orig = { sistemaClasse: e.sistemaClasse, sistema: e.sistema, sistemas: e.sistemas, dn: e.dn, dnFonte: e.dnFonte, dnPortas: e.dnPortas, dnParam: e.dnParam };
+  const o = e.orig, ed = edicoes[e.guid] || {};
+  e.nomeEd = ed.nome || '';
+  e.sistemaClasse = ed.sistema || o.sistemaClasse;
+  e.sistema = ed.sistema || o.sistema;
+  e.sistemas = ed.sistema ? [ed.sistema] : o.sistemas;
+  if (ed.dn > 0) { e.dn = ed.dn; e.dnFonte = 'manual'; e.dnPortas = []; e.dnParam = ''; }
+  else { e.dn = o.dn; e.dnFonte = o.dnFonte; e.dnPortas = o.dnPortas; e.dnParam = o.dnParam; }
+  e.editado = !!(ed.nome || ed.sistema || ed.dn > 0);
+}
+
+function aplicarEdicoesSalvas(M) {
+  for (const e of M.elements) if (edicoes[e.guid]) aplicarEdicao(e);
+  atualizarListasModelo(M);
+}
+
+function atualizarListasModelo(M) {
+  M.diametros = [...new Set(M.elements.filter(e => e.dn).map(e => e.dn))].sort((a, b) => a - b);
+  M.sistemas = [...new Set(M.elements.map(e => e.sistemaClasse))].sort();
+}
+
+function gravarEdicao(ids, campos, restaurar) {
+  const M = S.model;
+  for (const i of ids) {
+    const e = M.elements[i];
+    if (restaurar) delete edicoes[e.guid];
+    else {
+      const ed = Object.assign({}, edicoes[e.guid]);
+      for (const k of ['nome', 'sistema', 'dn']) if (campos[k]) ed[k] = campos[k];
+      if (ed.nome || ed.sistema || ed.dn) edicoes[e.guid] = ed; else delete edicoes[e.guid];
+    }
+    aplicarEdicao(e);
+  }
+  salvarEdicoes();
+  atualizarListasModelo(M);
+  aplicarModo(S.modo);
+  renderTabs();
+  painelElemento();
+  atualizarDestaque();
+}
+
+/* ids: peças afetadas. Com várias, campo vazio = não mexe naquele campo. */
+function editorEdicao(ids) {
+  const M = S.model, uma = ids.length === 1 ? M.elements[ids[0]] : null;
+  const box = el('details', 'pset'); box.style.marginTop = '10px';
+  box.appendChild(el('summary', null, 'Editar nome, sistema e diâmetro' + (uma ? '' : ' (' + ids.length + ' peças)')));
+  const campo = (rot, tipo, valor, ph) => {
+    box.appendChild(el('div', null, rot)).style.cssText = 'font-size:11px;color:var(--text-dim);margin:7px 0 2px';
+    const inp = el('input'); inp.type = tipo; inp.value = valor; inp.placeholder = ph;
+    inp.style.width = '100%';
+    if (tipo === 'number') { inp.min = 1; inp.step = 1; }
+    box.appendChild(inp); return inp;
+  };
+  const iNome = campo('Nome', 'text', uma ? (uma.nomeEd || '') : '', uma ? (uma.tipo || uma.familia || '') : '(manter os nomes atuais)');
+  const iSis = campo('Sistema', 'text', '', uma ? uma.sistemaClasse : '(manter os sistemas atuais)');
+  iSis.setAttribute('list', 'listaSistemas');
+  let dl = document.getElementById('listaSistemas');
+  if (!dl) { dl = el('datalist'); dl.id = 'listaSistemas'; document.body.appendChild(dl); }
+  dl.innerHTML = '';
+  for (const s of M.sistemas) dl.appendChild(Object.assign(el('option'), { value: s }));
+  if (uma && uma.editado && edicoes[uma.guid] && edicoes[uma.guid].sistema) iSis.value = uma.sistemaClasse;
+  const iDn = campo('Diâmetro (mm)', 'number', uma && edicoes[uma.guid] && edicoes[uma.guid].dn ? uma.dn : '', uma ? (uma.dn ? String(uma.dn) : '—') : '(manter os diâmetros atuais)');
+
+  const acoes = el('div', 'row'); acoes.style.marginTop = '9px';
+  const ok = el('button', 'btn pri', 'Aplicar');
+  ok.onclick = () => gravarEdicao(ids, { nome: iNome.value.trim(), sistema: iSis.value.trim(), dn: Math.round(+iDn.value) || 0 }, false);
+  const rest = el('button', 'btn', 'Restaurar original');
+  rest.onclick = () => gravarEdicao(ids, {}, true);
+  acoes.appendChild(ok); acoes.appendChild(rest);
+  box.appendChild(acoes);
+  const n = ids.filter(i => M.elements[i].editado).length;
+  if (n) box.open = true;
+  if (n) box.appendChild(el('div', 'src', n + (n > 1 ? ' peças com edição manual' : ' peça com edição manual') + ' · salvas neste navegador')).style.cssText = 'font-size:10.5px;color:var(--text-faint);margin-top:6px';
+  return box;
+}
+
 function detalheElemento(p, e, compacto) {
   const kps = el('div', 'keyparams');
 
@@ -1665,7 +1754,7 @@ function detalheElemento(p, e, compacto) {
   else if (e.dn) dnTxt = e.dn + ' mm';
   else if (e.largura) dnTxt = fmt(e.largura, 0) + ' × ' + fmt(e.altura, 0) + ' mm';
   kp1.appendChild(el('div', 'v', dnTxt));
-  let origem = e.dnFonte ? 'origem: ' + FONTE_DN[e.dnFonte] : 'o IFC não traz diâmetro para esta peça';
+  let origem = e.dnFonte ? 'origem: ' + (e.dnFonte === 'manual' ? 'editado por você' : FONTE_DN[e.dnFonte]) : 'o IFC não traz diâmetro para esta peça';
   if (e.dnParam) origem += ' "' + e.dnParam + '"';
   if (e.dnFonte === 'pset' && e.dnGeom) origem += e.dnGeom === e.dn ? ' · confere com a geometria' : ' · a geometria dá ' + e.dnGeom + ' mm';
   kp1.appendChild(el('div', 'src', origem));
@@ -1675,8 +1764,8 @@ function detalheElemento(p, e, compacto) {
     // 2. tipo de tubo
     const kp2 = el('div', 'kp tp');
     kp2.appendChild(el('div', 'k', 'Tipo'));
-    kp2.appendChild(el('div', 'v', e.tipo || e.familia || '—'));
-    kp2.appendChild(el('div', 'src', e.familia ? 'família: ' + e.familia : ''));
+    kp2.appendChild(el('div', 'v', nomeEl(e) || '—'));
+    kp2.appendChild(el('div', 'src', e.nomeEd ? 'nome editado · original: ' + (e.tipo || e.familia || '—') : (e.familia ? 'família: ' + e.familia : '')));
     kps.appendChild(kp2);
 
     // 3. sistema
@@ -1736,6 +1825,7 @@ function detalheElemento(p, e, compacto) {
     const b2 = el('button', 'btn', 'Ocultar'); b2.onclick = () => { S.visivelEl[e.i] = 0; atualizarVisibilidade(); renderTabs(); };
     acoes.appendChild(b1); acoes.appendChild(b2);
     p.appendChild(acoes);
+    p.appendChild(editorEdicao([e.i]));
   }
 }
 
@@ -1959,7 +2049,7 @@ function renderCorpoElementos() {
   const els = S.model.elements.filter(e => {
     if (!elementoVisivel(e.i)) return false;
     if (!q) return true;
-    return (e.objType + ' ' + e.sistemaClasse + ' ' + e.categoria + ' ' + e.tag +
+    return (e.objType + ' ' + (e.nomeEd || '') + ' ' + e.sistemaClasse + ' ' + e.categoria + ' ' + e.tag +
       ' DN' + e.dn + ' ' + e.dn + ' ' + e.pavimento + ' ' + e.material + ' ' + e.fabricante + ' ' +
       (e.marca || '') + ' ' + (e.comentarios || '') + ' ' + (e.nomeSistema || '') + ' ' + (e.descricao || ''))
       .toLowerCase().includes(q);
@@ -1970,7 +2060,7 @@ function renderCorpoElementos() {
   const comMarca = S.model.elements.some(e => e.marca);   // só o IFC com "Marca" (Revit)
   const linhas = corte.map(e => ({
     _el: e.i,
-    c: [e.categoria, e.tipo || e.familia, pill(e.dn), e.sistemaClasse]
+    c: [e.categoria, (e.editado ? '✎ ' : '') + (nomeEl(e) || ''), pill(e.dn), e.sistemaClasse]
       .concat(comMarca ? [e.marca || ''] : [], [ehLinear(e) && e.comprimento ? fmt(e.comprimento, 3) : '', e.tag])
   }));
   alvo.innerHTML = '';

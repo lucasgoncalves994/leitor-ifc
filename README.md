@@ -5,6 +5,12 @@ direto (parser próprio em JavaScript), mostra o modelo em 3D e extrai os
 parâmetros de cada elemento: diâmetro, marca, descrição, sistema, vazão e HMT
 (do próprio IFC quando o Revit os exporta; senão, reconstruídos pela geometria).
 
+## Editar peças
+
+No painel de uma peça (ou de um conjunto selecionado), "Editar nome, sistema e
+diâmetro" altera os três campos. As edições ficam salvas no navegador e podem ser
+desfeitas com "Restaurar original".
+
 ## Rodar
 
 O leitor busca `modelo.json` por `fetch`, que o navegador bloqueia em `file://`.

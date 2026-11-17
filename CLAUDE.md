@@ -93,6 +93,18 @@ Extraídos em `buildIfcModel` (funções `getParam`, `textoParam`, `numParam`):
 propriedade `Length` do arquivo com erro de 4,4 × 10⁻¹⁶ m. Se mexer na cadeia de
 posicionamento, refazer essa comparação.
 
+## Edição manual (nome, sistema, diâmetro)
+
+Painel da peça e painel de conjunto têm "Editar nome, sistema e diâmetro" (em
+`index.html`: `editorEdicao`, `gravarEdicao`, `aplicarEdicao`). As edições ficam em
+`localStorage['leitor-ifc-edicoes']`, por GUID (uniões sintéticas já têm GUID próprio
+`…#uniaoN`), e são reaplicadas em `montar()` sobre qualquer leitura do IFC. O valor lido
+fica em `e.orig` e volta com "Restaurar original". Editar muda `e.sistemaClasse`, `e.dn`
+(`dnFonte = 'manual'`) e `e.nomeEd`, então legenda, filtros, quantitativos e tabelas
+acompanham sem tratamento extra. Com várias peças, campo vazio = não mexe naquele campo.
+O nome editado só aparece no painel, na tabela Elementos e na busca (as tabelas de
+peças continuam agrupando por `objType`). Não há exportação das edições.
+
 ## Uniões embutidas em equipamentos
 
 Várias famílias de equipamento trazem as uniões dos bocais desenhadas dentro do
