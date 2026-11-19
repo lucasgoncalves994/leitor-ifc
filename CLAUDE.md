@@ -191,6 +191,12 @@ a união e o corpo eram selecionados e contados juntos.
   `desenharContorno` é pulado por `ATRASO_CONTORNO` (200 ms) depois do último
   `posicionarCamera` e volta quando a câmera para. Todo movimento deve passar por
   `posicionarCamera`, senão o contorno volta a pesar no arraste.
+  **O fantasma também:** com poucos sistemas visíveis (ex.: água quente + ralos) o
+  fantasma tem ~230 mil triângulos translúcidos e dobrou o custo do quadro (10,8 →
+  20,6 ms medidos). `laco` não o desenha enquanto a câmera se move (mesmo
+  `ATRASO_CONTORNO`) e o restaura na sequência. O custo restante do arraste é o dos
+  triângulos visíveis (Lambert, dupla face); se ainda pesar, o próximo passo é
+  reduzir o pixel ratio durante o movimento.
   **Não usar mudança de número da peça como critério de borda:** tubo e conexão
   se sobrepõem na mesma superfície e o número alterna em manchas, gerando
   emendas falsas dentro das conexões (foi a 1ª versão, rejeitada).

@@ -1110,11 +1110,26 @@ function vista(v) {
   enquadrar(undefined, true);
 }
 
+/* O fantasma (peças ocultas em transparência) pode ter centenas de milhares de
+   triângulos translúcidos, que dobram o custo de cada quadro quando poucos sistemas
+   estão visíveis. Enquanto a câmera se move ele não é desenhado; volta ~0,2 s depois. */
+let timerFantasma = 0;
 function laco() {
   requestAnimationFrame(laco);
   if (!renderer || !scene || !precisaRender) return;
   precisaRender = false;
 
+  const fanReal = meshFantasma.visible;
+  if (fanReal && performance.now() - ultimoMovimento < ATRASO_CONTORNO) {
+    meshFantasma.visible = false;
+    clearTimeout(timerFantasma);
+    timerFantasma = setTimeout(() => { precisaRender = true; }, ATRASO_CONTORNO + 20);
+  }
+  desenharQuadro();
+  meshFantasma.visible = fanReal;
+}
+
+function desenharQuadro() {
   const foco = meshContexto && meshContexto.visible;
   if (!foco) { renderer.autoClear = true; renderer.render(scene, cam); desenharContorno(false); return; }
 
