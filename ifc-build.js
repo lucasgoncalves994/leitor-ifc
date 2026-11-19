@@ -355,6 +355,10 @@ async function buildIfcModel(text, onProgress) {
     el.vazaoLs = numParam(props, 'Mecânica', 'VAZÃO');             // vazão da bomba (L/s: 5,5556 = 20 m³/h)
     if (el.vazaoLs == null) el.vazaoLs = numParam(props, 'Resultados da análise', 'Vazão de projeto L/s');
 
+    // filtro opcional da página: peça recusada aqui não entra em nada — nem na
+    // geometria, nem nas tabelas, nem nos metros de tubo (ver FILTRO_ELEMENTO)
+    if (typeof FILTRO_ELEMENTO === 'function' && !FILTRO_ELEMENTO(el)) continue;
+
     elements.push(el);
     byId.set(id, el);
     if ((k & 63) === 0) await report(0.34 + k / ids.length * 0.18, 'Extraindo parâmetros dos elementos');

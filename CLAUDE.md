@@ -31,6 +31,15 @@ mantém as chaves antigas), e a semente de apontamentos só vale para a piscina.
 O arquivo único continua sendo o da piscina: `build_standalone.py` apaga o `<select>`, e
 sem ele `montarSeletorModelo` sai na primeira linha.
 
+**Peças tiradas de um modelo.** A entrada do modelo pode trazer `fora(e)`, que vira
+`window.FILTRO_ELEMENTO` em `iniciar()`; `buildIfcModel` consulta esse filtro **antes**
+de guardar a peça, então ela não entra em geometria, tabela nem quantitativo (abrir um
+IFC do computador limpa o filtro). No `hidro` sai a **rede de incêndio** a pedido do
+projetista (19/11/2026): tudo que casa com `tupy` (8 tubos de aço K10 e ~130 conexões
+TupyGrooved) e as 22 caixas `00322800` 2 1/2" coladas nelas. O modelo vai de 5.310 para
+**5.150 elementos**, de 2.353.552 para **2.124.706 triângulos** e de 3.530,35 para
+**3.431,80 m** de tubo; o DN 89 some da legenda.
+
 ## O problema que originou o projeto
 
 No R00 o Revit exportou `Pset_FlowSegmentPipeSegment` contendo **apenas `Length`**:
