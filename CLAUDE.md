@@ -3,14 +3,19 @@
 Leitor de IFC em navegador, escrito do zero para o modelo hidráulico da piscina
 do Art Stay (Unique). Não usa nenhuma biblioteca de IFC: o parser é próprio.
 
-Estudo de caso: `ARTST-CHI-PIS-EX-0001-MOD-PISCINA_COMPLETA-R01.ifc`
-(`modelo.json`) — IFC2X3, exportado pelo Revit 2024 (PTB, 16/11/2026), unidade
-**centímetro**, 670 elementos (688 com as 18 uniões separadas), 495.335 triângulos,
-382,47 m de tubo.
+Estudo de caso: `ARTST-CHI-PIS-EX-0001-MOD-PISCINA_COMPLETA-R02.ifc`
+(`modelo.json`) — IFC2X3, exportado pelo Revit 2024 (PTB, 18/11/2026), unidade
+**centímetro**, 667 elementos (685 com as 18 uniões separadas), 499.542 triângulos,
+384,26 m de tubo. Mesma estrutura de parâmetros do R01 (609 → 605 diâmetros vindos de
+`Tamanho`, 342 de 342 conferem com a geometria).
 O **R00** (722 elementos, 507.828 triângulos, 641,10 m de tubo) fica em
 `modelo-R00.json`, como referência (para usá-lo: renomear para `modelo.json`).
-A diferença de tubo entre as revisões está quase toda no sistema elétrico DN25
-(340,08 m no R00, 74,87 m no R01).
+O **R01** (688 elementos, 382,47 m) foi substituído pelo R02 e só existe no histórico
+do git (commit `a7180df` e anteriores, em `modelo.json`).
+A diferença de tubo entre o R00 e as revisões seguintes está quase toda no sistema
+elétrico DN25 (340,08 m no R00, 74,87 m no R01).
+Trocar de revisão: `python preparar_modelo.py <ifc>` e `python build_standalone.py`
+(o arquivo único precisa ser regerado, senão o botão de baixar entrega a versão antiga).
 
 ## O problema que originou o projeto
 

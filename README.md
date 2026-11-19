@@ -40,7 +40,7 @@ Esse arquivo abre com duplo clique, sem servidor e sem internet.
 | `ifc-core.js` | Parser STEP/IFC e extração de geometria |
 | `ifc-build.js` | Camada de engenharia: diâmetro, tipo, sistema, quantitativos |
 | `three.min.js` | three.js r149 (UMD), fixado como arquivo próprio |
-| `modelo.json` | IFC embutido (hoje a revisão R01), comprimido em gzip + base64 |
+| `modelo.json` | IFC embutido (hoje a revisão R02), comprimido em gzip + base64 |
 | `modelo-R00.json` | Revisão R00, guardada como referência (renomeie para `modelo.json` para usá-la) |
 | `build_standalone.py` | Gera o HTML de arquivo único |
 | `preparar_modelo.py` | Converte um .ifc em `modelo.json` |
