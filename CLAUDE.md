@@ -227,9 +227,13 @@ a união e o corpo eram selecionados e contados juntos.
   `longe = r + diag×3`). Plano próximo fixo gastaria a precisão de
   profundidade e os tubos brigariam entre si com a vista afastada.
 
-- **Navegação estilo Revit:** botão do meio **sozinho só desloca** (vertical e
-  horizontal); **Shift + botão do meio gira**. Botão esquerdo gira, Shift + esquerdo
-  desloca. É preciso barrar `mousedown` do botão do meio, senão o Chrome abre a
+- **Navegação só no botão do meio** (pedido de 19/11/2026): sozinho desloca
+  (vertical e horizontal), **Shift + meio gira**. O esquerdo só seleciona (parado,
+  `movido < 5`; Shift/Ctrl somam) e o direito parado abre apontamento — nenhum dos
+  dois mexe na câmera, e arrastar com eles não faz nada. `modoDoBotao` devolve 0
+  para eles, e por isso `movido` passou a ser contado em `pointermove` antes do
+  `if (!arrastando)`: sem isso, arrastar com o esquerdo e soltar longe contaria
+  como clique e selecionaria a peça errada. É preciso barrar `mousedown` do botão do meio, senão o Chrome abre a
   rolagem automática. Shift + clique **parado** (menos de 5 px) soma à seleção;
   com movimento é deslocamento.
 

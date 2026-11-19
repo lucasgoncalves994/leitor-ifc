@@ -2366,13 +2366,12 @@ function instalarControles(cv) {
   };
 
   // 1 = girar (giroscópio), 2 = deslocar
-  // botão do meio sozinho só desloca (vertical e horizontal); com Shift, gira —
-  // como no Revit. O giro no botão do meio sem Shift foi o que saiu (19/11/2026).
-  // botão esquerdo sozinho gira; com Shift, desloca; botão direito desloca
+  // A câmera só se move com o botão do meio: sozinho desloca, com Shift gira.
+  // O esquerdo serve para selecionar e o direito para abrir apontamento; nenhum
+  // dos dois mexe na vista (decidido em 19/11/2026).
   function modoDoBotao(e) {
     if (e.button === 1) return e.shiftKey ? 1 : 2;
-    if (e.button === 0) return e.shiftKey ? 2 : 1;
-    return 2;
+    return 0;
   }
 
   cv.addEventListener('pointerdown', e => {
@@ -2388,9 +2387,12 @@ function instalarControles(cv) {
   cv.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
   cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   cv.addEventListener('pointermove', e => {
-    if (!arrastando) return;
     const dx = e.clientX - px, dy = e.clientY - py;
-    px = e.clientX; py = e.clientY; movido += Math.abs(dx) + Math.abs(dy);
+    px = e.clientX; py = e.clientY;
+    if (botaoAtivo < 0) return;
+    movido += Math.abs(dx) + Math.abs(dy);   // conta também com o esquerdo e o direito,
+    if (!arrastando) return;                 // que não movem a câmera mas precisam distinguir
+                                             // um clique parado de um arrasto
     if (arrastando === 1) {
       orb.teta -= dx * 0.006;
       orb.fi = Math.max(EPS, Math.min(Math.PI - EPS, orb.fi - dy * 0.006));
@@ -2398,11 +2400,9 @@ function instalarControles(cv) {
     posicionarCamera();
   });
   cv.addEventListener('pointerup', e => {
-    // só o botão esquerdo seleciona; girar com o do meio não muda a seleção.
-    // com Shift o arraste é deslocamento, mas o clique parado soma à seleção
-    const clique = botaoAtivo === 0 && movido < 5;
-    if (clique && (arrastando === 1 || e.shiftKey || e.ctrlKey || e.metaKey)) selecionarPorClique(e);
-    // botão direito parado (sem arrastar) numa peça: novo apontamento; arrastar continua deslocando
+    // só o botão esquerdo seleciona, e só parado (Shift ou Ctrl somam à seleção)
+    if (botaoAtivo === 0 && movido < 5) selecionarPorClique(e);
+    // botão direito parado (sem arrastar) numa peça: novo apontamento
     if (e.button === 2 && botaoAtivo === 2 && movido < 5) abrirPopupApontamento(e);
     arrastando = 0; botaoAtivo = -1;
   });
