@@ -2054,6 +2054,33 @@ function renderApontamentos() {
   marcarLinha();
 }
 
+/* Baixar um arquivo gerado na página. Dentro do visualizador de páginas do Claude
+   um <a download> não faz nada: lá o arquivo passa por claude.use("downloads"),
+   que mostra uma confirmação. Fora dele (servidor local, arquivo único) vale o link. */
+let _downloadsNs;
+function downloadsDoClaude() {
+  if (_downloadsNs === undefined)
+    _downloadsNs = (window.claude && typeof window.claude.use === 'function')
+      ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+  return _downloadsNs;
+}
+async function baixarArquivo(nome, blob) {
+  const ns = await downloadsDoClaude();
+  if (ns) {
+    try { await ns.save({ filename: nome, data: blob }); }
+    catch (err) {
+      const c = err && err.code;
+      if (c === 'declined') return;
+      alert(c === 'rate_limited' ? 'Já há um download aguardando confirmação.' : 'Não foi possível baixar o arquivo aqui (' + (c || err) + ').');
+    }
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = el('a'); a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function exportarApontamentos(lista) {
   const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const linhas = [['Status', 'Peça', 'Sistema', 'Diâmetro (mm)', 'Apontamento', 'Data', 'ID no Revit', 'GUID']];
@@ -2061,10 +2088,7 @@ function exportarApontamentos(lista) {
     linhas.push([a.resolvido ? 'concluído' : 'pendente', e ? (nomeEl(e) || e.categoria) : '', e ? e.sistemaClasse : '',
       e && e.dn ? e.dn : '', a.texto, dataBr(a.data), e ? e.tag : '', g]);
   const csv = '﻿' + linhas.map(l => l.map(esc).join(';')).join('\r\n');   // BOM + ";" abrem certo no Excel em português
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = el('a'); a.href = url; a.download = 'apontamentos-piscina.csv';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  baixarArquivo('apontamentos-piscina.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' }));
 }
 
 function detalheElemento(p, e, compacto) {
@@ -2830,12 +2854,20 @@ function exportarQuantitativoXlsx() {
     { nome: 'Elementos', xml: planilhaXml(lEl, [6, 24, 20, 34, 28, 48, 30, 9, 11, 14, 60, 24, 9, 18, 28, 12, 12], true) }
   ]);
   const base = (nome || 'modelo').replace(/\.ifc$/i, '').replace(/[^\w\-]+/g, '_');
-  const url = URL.createObjectURL(blob);
-  const a = el('a'); a.href = url; a.download = 'Quantitativo-' + base + '.xlsx';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  baixarArquivo('Quantitativo-' + base + '.xlsx', blob);
 }
 $('#xlsxBtn').onclick = () => { if (S.model) exportarQuantitativoXlsx(); };
+if ($('#baixarBtn')) $('#baixarBtn').addEventListener('click', async (ev) => {
+  ev.preventDefault();
+  const b = ev.currentTarget, antes = b.textContent;
+  b.textContent = 'Preparando…';
+  try {
+    const r = await fetch(b.getAttribute('href'));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await baixarArquivo(b.getAttribute('download'), await r.blob());
+  } catch (err) { alert('Não foi possível baixar a versão offline (' + (err.message || err) + ').'); }
+  b.textContent = antes;
+});
 
 iniciar();
 </script>

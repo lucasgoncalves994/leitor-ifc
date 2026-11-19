@@ -164,6 +164,12 @@ em `zipArmazenado` (arquivos só armazenados, sem compressão, o que pede apenas
 - Nome do arquivo: `S.nomeArquivo` (o `origem` do `modelo.json`, embutido também no arquivo
   único como `__MODELO_ORIGEM__`, ou o nome do .ifc aberto). O `FILE_NAME` interno do R02 é
   "070.ifc", por isso não serve.
+- **Downloads na página publicada.** O leitor também está publicado como página do Claude
+  ("Leitor IFC da Piscina", privada). Lá um `<a download>` não faz nada: todo arquivo gerado
+  passa por `baixarArquivo(nome, blob)`, que usa `claude.use("downloads").save(...)` quando
+  existe (a página declara a permissão `downloads`; o usuário confirma cada download) e o link
+  comum fora dele. Vale para o Excel, o CSV de apontamentos e "Baixar versão offline".
+  Ao mudar o leitor, republicar a página (`index.html`, `.js`, `modelo.json` e o arquivo único).
 
 ## Uniões embutidas em equipamentos
 
