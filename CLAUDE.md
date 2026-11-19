@@ -17,6 +17,20 @@ elétrico DN25 (340,08 m no R00, 74,87 m no R01).
 Trocar de revisão: `python preparar_modelo.py <ifc>` e `python build_standalone.py`
 (o arquivo único precisa ser regerado, senão o botão de baixar entrega a versão antiga).
 
+## Mais de um modelo no mesmo site
+
+`MODELOS` (em `index.html`) lista o que está publicado: `modelo.json` (piscina, o
+estudo de caso) e `modelo-hidro.json` (**HIDRO TIPO 1 E 2**, Revit 2024, IFC2X3, unidade
+**metro**, 71,5 MB de IFC → 19,3 MB de JSON, 5.310 elementos, 2.353.552 triângulos,
+3.530,35 m de tubo, 8 pavimentos, 4 sistemas, DN 25 a 89; a montagem leva ~23 s no Node).
+A página escolhe pelo `?modelo=<chave>` da URL (sem nada, a piscina); também aceita o nome
+de um `.json` da própria pasta. O seletor no cabeçalho (`#modeloSel`,
+`montarSeletorModelo`) abre o outro modelo **numa aba nova** e deixa a atual como está.
+Edições e apontamentos são guardados por modelo (`SUF_MODELO` entra nas chaves; a piscina
+mantém as chaves antigas), e a semente de apontamentos só vale para a piscina.
+O arquivo único continua sendo o da piscina: `build_standalone.py` apaga o `<select>`, e
+sem ele `montarSeletorModelo` sai na primeira linha.
+
 ## O problema que originou o projeto
 
 No R00 o Revit exportou `Pset_FlowSegmentPipeSegment` contendo **apenas `Length`**:

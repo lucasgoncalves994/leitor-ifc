@@ -22,6 +22,16 @@ O leitor já vem com **26 apontamentos da verificação das ligações do R02** 
 faltando, pontas abertas, peças fora do catálogo). Eles entram uma vez em cada
 navegador; depois é só resolver ou excluir, que não voltam.
 
+## Modelos publicados
+
+| Modelo | Endereço |
+|---|---|
+| Piscina — Art Stay (R02) | `index.html` |
+| Hidráulica — Tipo 1 e 2 | `index.html?modelo=hidro` |
+
+O seletor no cabeçalho troca de modelo numa aba nova. Cada modelo guarda as próprias
+edições e os próprios apontamentos.
+
 ## Rodar
 
 O leitor busca `modelo.json` por `fetch`, que o navegador bloqueia em `file://`.
@@ -51,7 +61,8 @@ Esse arquivo abre com duplo clique, sem servidor e sem internet.
 | `ifc-core.js` | Parser STEP/IFC e extração de geometria |
 | `ifc-build.js` | Camada de engenharia: diâmetro, tipo, sistema, quantitativos |
 | `three.min.js` | three.js r149 (UMD), fixado como arquivo próprio |
-| `modelo.json` | IFC embutido (hoje a revisão R02), comprimido em gzip + base64 |
+| `modelo.json` | IFC da piscina (revisão R02), comprimido em gzip + base64 |
+| `modelo-hidro.json` | IFC da hidráulica Tipo 1 e 2, mesmo formato |
 | `modelo-R00.json` | Revisão R00, guardada como referência (renomeie para `modelo.json` para usá-la) |
 | `build_standalone.py` | Gera o HTML de arquivo único |
 | `preparar_modelo.py` | Converte um .ifc em `modelo.json` |
