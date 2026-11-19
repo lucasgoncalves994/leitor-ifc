@@ -16,9 +16,10 @@ for arquivo in ['three.min.js', 'ifc-core.js', 'ifc-build.js']:
     html = html.replace(tag, '<script>\n/* ---- %s ---- */\n%s\n</script>' % (arquivo, js(arquivo)))
 
 # 2. embute o modelo compactado
-b64 = json.load(open('modelo.json', encoding='utf-8'))['gz']
+pacote = json.load(open('modelo.json', encoding='utf-8'))
+b64 = pacote['gz']
 html = html.replace('<script>\n/* ---- three.min.js ---- */',
-                    '<script>window.__MODELO_GZ__="%s";</script>\n<script>\n/* ---- three.min.js ---- */' % b64, 1)
+                    '<script>window.__MODELO_GZ__="%s";window.__MODELO_ORIGEM__=%s;</script>\n<script>\n/* ---- three.min.js ---- */' % (b64, json.dumps(pacote.get('origem', ''))), 1)
 
 # 3. o carregador passa a ler da variável embutida
 antigo = """async function descompacta(url) {
@@ -32,7 +33,7 @@ antigo = """async function descompacta(url) {
 novo = """async function descompacta(url) {
   if (typeof DecompressionStream !== 'function')
     throw new Error('Este navegador não descompacta o modelo embutido. Use o botão "Abrir outro IFC" e escolha o arquivo .ifc do seu computador.');
-  const pacote = { gz: window.__MODELO_GZ__ };
+  const pacote = { gz: window.__MODELO_GZ__, origem: window.__MODELO_ORIGEM__ };
   if (!pacote.gz) throw new Error('O modelo embutido não foi encontrado neste arquivo.');
   await progresso(0.015, 'Descompactando o modelo');
   const bin = atob(pacote.gz);"""

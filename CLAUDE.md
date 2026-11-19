@@ -145,6 +145,26 @@ rodada: trocar a lista e a versão. **Conferir os GUIDs contra o modelo antes de
 A verificação em si (grafo `IfcRelConnectsPorts` × geometria) foi feita com scripts
 avulsos em Node, que não ficam no repositório.
 
+## Exportar o quantitativo em Excel
+
+Botão "Exportar Excel" na barra das abas (`#xlsxBtn`, `exportarQuantitativoXlsx` no fim do
+`index.html`). Gera um `.xlsx` de verdade **sem biblioteca**: o arquivo é um zip de XML, montado
+em `zipArmazenado` (arquivos só armazenados, sem compressão, o que pede apenas o CRC-32) e
+`montarXlsx`/`planilhaXml` (texto em `inlineStr`, sem `sharedStrings`; estilos Arial em
+`XLSX_ESTILOS`, índices em `XS`).
+- Abas: Resumo (metros por DN, peças por categoria), Tubos por sistema, Peças, Peças por
+  sistema e Elementos (uma linha por peça). Mesmas regras de `quantitativos()`.
+- Leva **só o que está visível** no visor e já com as edições manuais; o Resumo diz quantos
+  elementos entraram e quantos estavam editados.
+- As abas de resumo são fórmulas sobre a aba Elementos, gravadas **com o valor já calculado**
+  (abre certo também fora do Excel) e `fullCalcOnLoad`. As peças contam com `SUMPRODUCT` por
+  igualdade exata, não `COUNTIFS` (descrição com `*`/`?` viraria curinga e a descrição vazia
+  não casava). Conferido: os 171 valores gravados batem com o recálculo do LibreOffice, com e
+  sem sistemas ocultos.
+- Nome do arquivo: `S.nomeArquivo` (o `origem` do `modelo.json`, embutido também no arquivo
+  único como `__MODELO_ORIGEM__`, ou o nome do .ifc aberto). O `FILE_NAME` interno do R02 é
+  "070.ifc", por isso não serve.
+
 ## Uniões embutidas em equipamentos
 
 Várias famílias de equipamento trazem as uniões dos bocais desenhadas dentro do

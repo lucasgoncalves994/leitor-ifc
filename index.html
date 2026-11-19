@@ -468,6 +468,7 @@ tbody tr.feito td:nth-child(5){text-decoration:line-through}   /* a coluna do te
     <button class="tab" data-pane="apontamentos">Apontamentos</button>
     <span class="spacer"></span>
     <button class="btn" id="copyBtn">Copiar tabela</button>
+    <button class="btn" id="xlsxBtn" title="Baixa uma planilha com o quantitativo do que está visível no visor">Exportar Excel</button>
   </div>
   <div class="tabwrap">
     <div class="tabpane on" id="pane-resumo"></div>
@@ -586,6 +587,7 @@ async function descompacta(url) {
   const pacote = await res.json();
   await progresso(0.015, 'Descompactando o modelo');
   const bin = atob(pacote.gz);
+  S.nomeArquivo = pacote.origem || '';           // o FILE_NAME interno do IFC pode ser outro ("070.ifc")
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const fluxo = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
@@ -603,6 +605,7 @@ async function iniciar() {
     await progresso(0.01, 'Baixando o modelo');
     const texto = await descompacta('modelo.json');
     await montar(texto);
+    if (S.nomeArquivo) $('#fileName').textContent = S.nomeArquivo;
   } catch (e) {
     $('#lerr').classList.remove('hidden');
     $('#lerr').textContent = e.message || String(e);
@@ -2594,6 +2597,7 @@ $('#fileInput').onchange = async (e) => {
     const txt = new TextDecoder('utf-8').decode(buf);
     if (!/ISO-10303-21/i.test(txt.slice(0, 400))) throw new Error('Este arquivo não parece ser um IFC no formato STEP.');
     await montar(txt);
+    S.nomeArquivo = f.name;
     $('#fileName').textContent = f.name;
   } catch (err) {
     $('#lerr').classList.remove('hidden');
@@ -2612,6 +2616,226 @@ $('#copyBtn').onclick = async () => {
   }
   setTimeout(() => { b.textContent = antes; }, 2200);
 };
+
+/* =========================================================
+   10. Exportar o quantitativo em Excel (.xlsx)
+   Sem biblioteca: o .xlsx é um zip de arquivos XML. Os arquivos vão
+   "armazenados" (sem compressão), o que só pede o CRC-32 de cada um.
+   As abas de resumo são fórmulas sobre a aba Elementos (com o valor já
+   calculado gravado junto, para abrir certo também fora do Excel).
+   ========================================================= */
+const CRC_TAB = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_TAB[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+function zipArmazenado(arquivos) {                // [{ nome, texto }] -> Blob
+  const enc = new TextEncoder(), partes = [], central = [];
+  let pos = 0;
+  const d = new Date();
+  const hora = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dia = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const a of arquivos) {
+    const nome = enc.encode(a.nome), dados = enc.encode(a.texto), crc = crc32(dados);
+    const loc = new DataView(new ArrayBuffer(30));
+    loc.setUint32(0, 0x04034b50, true); loc.setUint16(4, 20, true); loc.setUint16(6, 0x0800, true);  // UTF-8
+    loc.setUint16(10, hora, true); loc.setUint16(12, dia, true); loc.setUint32(14, crc, true);
+    loc.setUint32(18, dados.length, true); loc.setUint32(22, dados.length, true); loc.setUint16(26, nome.length, true);
+    const cen = new DataView(new ArrayBuffer(46));
+    cen.setUint32(0, 0x02014b50, true); cen.setUint16(4, 20, true); cen.setUint16(6, 20, true); cen.setUint16(8, 0x0800, true);
+    cen.setUint16(12, hora, true); cen.setUint16(14, dia, true); cen.setUint32(16, crc, true);
+    cen.setUint32(20, dados.length, true); cen.setUint32(24, dados.length, true); cen.setUint16(28, nome.length, true);
+    cen.setUint32(42, pos, true);
+    partes.push(loc, nome, dados); central.push(cen, nome);
+    pos += 30 + nome.length + dados.length;
+  }
+  const tamCentral = central.reduce((s, x) => s + x.byteLength, 0);
+  const fim = new DataView(new ArrayBuffer(22));
+  fim.setUint32(0, 0x06054b50, true); fim.setUint16(8, arquivos.length, true); fim.setUint16(10, arquivos.length, true);
+  fim.setUint32(12, tamCentral, true); fim.setUint32(16, pos, true);
+  return new Blob(partes.concat(central, [fim]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+// estilos (índices de cellXfs em XLSX_ESTILOS)
+const XS = { cab: 1, txt: 2, n2: 3, int: 4, totTxt: 5, totN2: 6, totInt: 7, titulo: 8, rotulo: 9, nota: 10, n3: 11 };
+const XLSX_ESTILOS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+  '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="#,##0.000"/></numFmts>' +
+  '<fonts count="5"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>' +
+  '<font><b/><sz val="10"/><name val="Arial"/></font><font><b/><sz val="14"/><name val="Arial"/></font><font><i/><sz val="9"/><name val="Arial"/></font></fonts>' +
+  '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/></patternFill></fill>' +
+  '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/></patternFill></fill></fills>' +
+  '<borders count="2"><border/><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right>' +
+  '<top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>' +
+  '<cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="12">' +
+  '<xf fontId="0"/>' +
+  '<xf fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
+  '<xf fontId="0" borderId="1" applyBorder="1"/>' +
+  '<xf fontId="0" borderId="1" numFmtId="164" applyBorder="1" applyNumberFormat="1"/>' +
+  '<xf fontId="0" borderId="1" numFmtId="1" applyBorder="1" applyNumberFormat="1"/>' +
+  '<xf fontId="2" fillId="3" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/>' +
+  '<xf fontId="2" fillId="3" borderId="1" numFmtId="164" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/>' +
+  '<xf fontId="2" fillId="3" borderId="1" numFmtId="1" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1"/>' +
+  '<xf fontId="3" applyFont="1"/><xf fontId="2" applyFont="1"/><xf fontId="4" applyFont="1"/>' +
+  '<xf fontId="0" borderId="1" numFmtId="165" applyBorder="1" applyNumberFormat="1"/>' +
+  '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+const xmlEsc = (v) => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const colLetra = (n) => { let s = ''; for (n++; n; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+const fStr = (v) => '"' + String(v).replace(/"/g, '""') + '"';       // texto literal dentro de fórmula
+
+// linhas: array de arrays de células; célula = valor | { v, f, s } (f sem "=", v = valor já calculado)
+function planilhaXml(linhas, larguras, congelar) {
+  let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+  if (congelar) x += '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>';
+  x += '<cols>' + larguras.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols><sheetData>';
+  linhas.forEach((ln, r) => {
+    if (!ln) return;
+    x += '<row r="' + (r + 1) + '">';
+    ln.forEach((c, k) => {
+      if (c == null || c === '') { return; }
+      const cel = (typeof c === 'object') ? c : { v: c };
+      const ref = colLetra(k) + (r + 1), s = cel.s ? ' s="' + cel.s + '"' : '';
+      const num = typeof cel.v === 'number' && isFinite(cel.v);
+      if (cel.f) x += '<c r="' + ref + '"' + s + (num ? '' : ' t="str"') + '><f>' + xmlEsc(cel.f) + '</f><v>' + xmlEsc(cel.v == null ? '' : cel.v) + '</v></c>';
+      else if (cel.v == null || cel.v === '') x += '<c r="' + ref + '"' + s + '/>';
+      else if (num) x += '<c r="' + ref + '"' + s + '><v>' + cel.v + '</v></c>';
+      else x += '<c r="' + ref + '"' + s + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(cel.v) + '</t></is></c>';
+    });
+    x += '</row>';
+  });
+  return x + '</sheetData></worksheet>';
+}
+
+function montarXlsx(abas) {                       // [{ nome, xml }] -> Blob
+  const ns = 'http://schemas.openxmlformats.org/';
+  const arqs = [
+    { nome: '[Content_Types].xml', texto: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="' + ns + 'package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      abas.map((a, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>' },
+    { nome: '_rels/.rels', texto: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="' + ns + 'package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="' + ns + 'officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { nome: 'xl/workbook.xml', texto: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="' + ns + 'spreadsheetml/2006/main" xmlns:r="' + ns + 'officeDocument/2006/relationships"><sheets>' +
+      abas.map((a, i) => '<sheet name="' + xmlEsc(a.nome) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') +
+      '</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>' },
+    { nome: 'xl/_rels/workbook.xml.rels', texto: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="' + ns + 'package/2006/relationships">' +
+      abas.map((a, i) => '<Relationship Id="rId' + (i + 1) + '" Type="' + ns + 'officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') +
+      '<Relationship Id="rId' + (abas.length + 1) + '" Type="' + ns + 'officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+    { nome: 'xl/styles.xml', texto: XLSX_ESTILOS }
+  ].concat(abas.map((a, i) => ({ nome: 'xl/worksheets/sheet' + (i + 1) + '.xml', texto: a.xml })));
+  return zipArmazenado(arqs);
+}
+
+// mesma bitola que quantitativos() usa para as peças
+const bitolaEl = (e) => ehLinear(e) ? String(e.dn || '—')
+  : (e.dnPortas.length > 1 ? e.dnPortas.join(' × ') : (e.dn ? String(e.dn) : '—'));
+
+function exportarQuantitativoXlsx() {
+  const M = S.model, nome = S.nomeArquivo || M.origem || '';
+  const Q = quantitativos(M, (e) => elementoVisivel(e.i));
+  const els = M.elements.filter(e => elementoVisivel(e.i));
+  const N = els.length + 1;                       // última linha da aba Elementos
+  const R = (c) => 'Elementos!$' + c + '$2:$' + c + '$' + N;
+  const T = (v, s) => ({ v, s: s || XS.txt });
+
+  // ---- Elementos: a base das fórmulas ----
+  const colsEl = ['Nº', 'GUID', 'Categoria', 'Família', 'Tipo', 'Família:Tipo', 'Sistema', 'DN (mm)', 'Bitola (mm)', 'Comprimento (m)',
+    'Descrição do material', 'Nome editado', 'Marca', 'Pavimento', 'Material', 'Origem do DN', 'ID no Revit'];
+  const lEl = [colsEl.map(t => T(t, XS.cab))];
+  for (const e of els)
+    lEl.push([T(e.i + 1, XS.int), T(e.guid), T(e.categoria), T(e.familia), T(e.tipo), T(e.objType), T(e.sistemaClasse),
+      T(e.dn || null, XS.int), T(bitolaEl(e)), T(ehLinear(e) && e.comprimento ? e.comprimento : null, XS.n3), T(e.descricao || null),
+      T(e.nomeEd || null), T(e.marca || null), T(e.pavimento || null), T(e.material || null),
+      T(e.dnFonte === 'manual' ? 'editado' : (e.dnFonte || null)), T(e.tag || null)]);
+
+  // ---- Resumo ----
+  const nEd = els.filter(e => e.editado).length;
+  const lRes = [[{ v: 'Quantitativo – ' + (nome || 'modelo IFC'), s: XS.titulo }], null,
+    [{ v: 'Arquivo IFC', s: XS.rotulo }, nome],
+    [{ v: 'Exportado em', s: XS.rotulo }, new Date().toLocaleString('pt-BR')],
+    [{ v: 'Elementos', s: XS.rotulo }, els.length === M.elements.length ? 'todos (' + els.length + ')'
+      : els.length + ' de ' + M.elements.length + ' (só o que estava visível no visor)'],
+    [{ v: 'Edições manuais', s: XS.rotulo }, nEd ? nEd + ' peça(s) com nome, sistema ou diâmetro editado no leitor (já aplicadas)' : 'nenhuma'],
+    [{ v: 'Observação', s: XS.rotulo }, 'Comprimentos medidos na geometria do IFC, sem perdas. As abas de resumo são fórmulas sobre a aba Elementos.'],
+    null, [{ v: 'Tubos – metros por diâmetro', s: XS.rotulo }],
+    [T('DN (mm)', XS.cab), T('Comprimento (m)', XS.cab), T('Trechos', XS.cab)]];
+  const tubos = (cond) => els.filter(e => ehLinear(e) && cond(e));
+  let r0 = lRes.length + 1;
+  for (const x of Q.porDN) {
+    const r = lRes.length + 1, t = tubos(e => (e.dn || 0) === x.dn);
+    const crit = '(' + R('H') + '=A' + r + ')';
+    lRes.push([T(x.dn || '—', XS.int),
+      { v: x.m, s: XS.n2, f: 'SUMPRODUCT(ISNUMBER(' + R('J') + ')*' + crit + ',' + R('J') + ')' },
+      { v: t.length, s: XS.int, f: 'SUMPRODUCT(ISNUMBER(' + R('J') + ')*' + crit + ')' }]);
+  }
+  let rt = lRes.length + 1;
+  lRes.push([T('Total', XS.totTxt), { v: Q.totalM, s: XS.totN2, f: 'SUM(B' + r0 + ':B' + (rt - 1) + ')' },
+    { v: tubos(() => true).length, s: XS.totInt, f: 'SUM(C' + r0 + ':C' + (rt - 1) + ')' }]);
+  lRes.push(null, [{ v: 'Peças por categoria', s: XS.rotulo }], [T('Categoria', XS.cab), T('Quantidade (un)', XS.cab)]);
+  const cats = [...new Set(els.filter(e => !ehLinear(e)).map(e => e.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  r0 = lRes.length + 1;
+  for (const c of cats) {
+    const r = lRes.length + 1;
+    lRes.push([T(c), { v: els.filter(e => e.categoria === c).length, s: XS.int, f: 'COUNTIF(' + R('C') + ',A' + r + ')' }]);
+  }
+  rt = lRes.length + 1;
+  lRes.push([T('Total', XS.totTxt), { v: els.filter(e => !ehLinear(e)).length, s: XS.totInt, f: 'SUM(B' + r0 + ':B' + (rt - 1) + ')' }]);
+  const nUn = els.filter(e => e.sintetico).length;
+  if (nUn) lRes.push(null, [{ v: 'Inclui ' + nUn + ' união(ões) desenhada(s) dentro de equipamentos, contadas como "Conexão".', s: XS.nota }]);
+
+  // ---- Tubos por sistema ----
+  const lSis = [['Sistema', 'Tipo de tubo', 'DN (mm)', 'Comprimento (m)', 'Trechos'].map(t => T(t, XS.cab))];
+  for (const x of Q.porSistemaDN) {
+    const r = lSis.length + 1, crit = '(' + R('G') + '=A' + r + ')*(' + R('H') + '=C' + r + ')';
+    lSis.push([T(x.sistema), T(x.tipo), T(x.dn || '—', XS.int),
+      { v: x.m, s: XS.n2, f: 'SUMPRODUCT(ISNUMBER(' + R('J') + ')*' + crit + ',' + R('J') + ')' },
+      { v: x.n, s: XS.int, f: 'SUMPRODUCT(ISNUMBER(' + R('J') + ')*' + crit + ')' }]);
+  }
+  let n = lSis.length;
+  lSis.push([T('Total', XS.totTxt), T('', XS.totTxt), T('', XS.totTxt),
+    { v: Q.totalM, s: XS.totN2, f: 'SUM(D2:D' + n + ')' }, { v: Q.porSistemaDN.reduce((s, x) => s + x.n, 0), s: XS.totInt, f: 'SUM(E2:E' + n + ')' }]);
+
+  // ---- Peças (e por sistema) ----
+  // conta por igualdade exata (SUMPRODUCT), não por COUNTIFS: descrições podem ter * ou ? e
+  // a célula vazia de "Descrição" precisa casar com a vazia de Elementos
+  const pecas = (linhas, comSis) => {
+    const o = comSis ? 1 : 0, L = (k) => colLetra(k + o);
+    const cab = (comSis ? ['Sistema'] : []).concat(['Categoria', 'Família', 'Tipo', 'Bitola (mm)', 'Descrição do material', 'Quantidade (un)']);
+    const out = [cab.map(t => T(t, XS.cab))];
+    for (const x of linhas) {
+      const r = out.length + 1;
+      let f = '(' + R('F') + '=' + fStr(x.objType) + ')*(' + R('I') + '=' + L(3) + r + ')*(' + R('K') + '=' + L(4) + r + ')';
+      if (comSis) f += '*(' + R('G') + '=A' + r + ')';
+      out.push((comSis ? [T(x.sistema)] : []).concat([T(x.categoria), T(x.familia), T(x.tipo), T(x.bitola), T(x.descricao || null),
+        { v: x.n, s: XS.int, f: 'SUMPRODUCT(' + f + ')' }]));
+    }
+    const fim = out.length, q = L(5);
+    out.push(Array.from({ length: 5 + o }, (_, k) => T(k ? '' : 'Total', XS.totTxt))
+      .concat([{ v: linhas.reduce((s, x) => s + x.n, 0), s: XS.totInt, f: 'SUM(' + q + '2:' + q + fim + ')' }]));
+    return out;
+  };
+
+  const blob = montarXlsx([
+    { nome: 'Resumo', xml: planilhaXml(lRes, [26, 18, 14], false) },
+    { nome: 'Tubos por sistema', xml: planilhaXml(lSis, [32, 24, 10, 16, 10], true) },
+    { nome: 'Peças', xml: planilhaXml(pecas(Q.pecas, false), [20, 38, 28, 12, 62, 14], true) },
+    { nome: 'Peças por sistema', xml: planilhaXml(pecas(Q.pecasPorSistema, true), [30, 20, 38, 28, 12, 62, 14], true) },
+    { nome: 'Elementos', xml: planilhaXml(lEl, [6, 24, 20, 34, 28, 48, 30, 9, 11, 14, 60, 24, 9, 18, 28, 12, 12], true) }
+  ]);
+  const base = (nome || 'modelo').replace(/\.ifc$/i, '').replace(/[^\w\-]+/g, '_');
+  const url = URL.createObjectURL(blob);
+  const a = el('a'); a.href = url; a.download = 'Quantitativo-' + base + '.xlsx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$('#xlsxBtn').onclick = () => { if (S.model) exportarQuantitativoXlsx(); };
 
 iniciar();
 </script>
