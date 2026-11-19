@@ -121,8 +121,13 @@ peças continuam agrupando por `objType`). Não há exportação das edições.
 salva, Esc ou clique fora cancela). O direito arrastando continua deslocando a câmera,
 e o direito no vazio não faz nada. O painel só lista, resolve e exclui (não cria).
 Seção "Apontamentos" no painel da peça (`secaoApontamentos`) e aba "Apontamentos" com a
-lista geral (`renderApontamentos`, filtro aberto/resolvido, `exportarApontamentos` gera
-CSV com BOM e `;` para o Excel em português). Ficam em
+lista geral (`renderApontamentos`, filtro todos/pendentes/concluídos, `exportarApontamentos`
+gera CSV com BOM e `;` para o Excel em português). A aba sai **pendentes primeiro, concluídos
+depois**, cada grupo do mais recente para o mais antigo, com uma faixa `_grupo` ("Pendentes
+(n)" / "Concluídos (n)", só quando os dois aparecem) e a linha concluída esmaecida e com o
+texto riscado (`tr.feito`). `tabela()` ganhou `_grupo` (faixa que ocupa todas as colunas) e
+`_cls`; "Copiar tabela" ignora as faixas. Na interface a palavra é "concluído"/"pendente";
+no dado continua `resolvido: true/false`. Ficam em
 `localStorage['leitor-ifc-apontamentos']` como `{ guid: [{ id, texto, data, resolvido }] }`,
 ligados ao GUID da peça (valem entre revisões do IFC se o GUID se mantém; apontamento de
 peça que sumiu continua listado como "peça não está neste modelo"). Peças com apontamento

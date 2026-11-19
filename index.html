@@ -288,6 +288,10 @@ tbody tr.conj{box-shadow:inset 3px 0 0 var(--conj);background:var(--surface-2)}
   white-space:nowrap;font-variant-numeric:tabular-nums;min-width:66px;text-align:center;
 }
 tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surface-2)}
+/* separadores da aba Apontamentos: faixa do grupo e linha ja concluida */
+tr.grupo td{font-weight:600;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-faint);background:var(--surface-2);border-top:1px solid var(--line)}
+tbody tr.feito td{color:var(--text-faint)}
+tbody tr.feito td:nth-child(5){text-decoration:line-through}   /* a coluna do texto */
 .dnpill{
   display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 6px;
   border-radius:9px;border:1px solid var(--line);
@@ -1925,18 +1929,18 @@ const dataBr = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLo
 function secaoApontamentos(e) {
   const box = el('details', 'pset'); box.style.marginTop = '10px';
   const lista = apontDe(e), ab = abertosDe(e);
-  box.appendChild(el('summary', null, 'Apontamentos' + (lista.length ? ' (' + ab + ' aberto' + (ab === 1 ? '' : 's') + ' de ' + lista.length + ')' : '')));
+  box.appendChild(el('summary', null, 'Apontamentos' + (lista.length ? ' (' + ab + ' pendente' + (ab === 1 ? '' : 's') + ' de ' + lista.length + ')' : '')));
   if (lista.length) box.open = true;
 
   for (const a of lista) {
     const li = el('div'); li.style.cssText = 'border-top:1px solid var(--line-soft);padding:7px 0;display:flex;gap:8px;align-items:flex-start';
-    const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!a.resolvido; ck.title = 'Marcar como resolvido';
+    const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!a.resolvido; ck.title = 'Marcar como concluído';
     ck.style.marginTop = '3px';
     ck.onchange = () => { a.resolvido = ck.checked; atualizarAposApontamento(); };
     const corpo = el('div'); corpo.style.cssText = 'flex:1 1 auto;min-width:0';
     const tx = el('div', null, a.texto);
     tx.style.cssText = 'font-size:12px;white-space:pre-wrap;word-break:break-word' + (a.resolvido ? ';text-decoration:line-through;color:var(--text-faint)' : '');
-    const dt = el('div', null, dataBr(a.data) + (a.resolvido ? ' · resolvido' : ''));
+    const dt = el('div', null, dataBr(a.data) + (a.resolvido ? ' · concluído' : ''));
     dt.style.cssText = 'font-size:10.5px;color:var(--text-faint);margin-top:2px';
     corpo.appendChild(tx); corpo.appendChild(dt);
     const del = el('button', 'fechar', '×'); del.title = 'Excluir este apontamento';
@@ -2006,14 +2010,17 @@ function renderApontamentos() {
 
   const barra = el('div'); barra.style.cssText = 'display:flex;gap:9px;align-items:center;margin-bottom:9px;flex-wrap:wrap';
   const sel = el('select');
-  for (const [v, t] of [['todos', 'Todos'], ['abertos', 'Só abertos'], ['resolvidos', 'Só resolvidos']]) sel.appendChild(Object.assign(el('option'), { value: v, textContent: t }));
+  for (const [v, t] of [['todos', 'Todos'], ['abertos', 'Só pendentes'], ['resolvidos', 'Só concluídos']]) sel.appendChild(Object.assign(el('option'), { value: v, textContent: t }));
   sel.value = S.filtroApont || 'todos';
   sel.onchange = () => { S.filtroApont = sel.value; renderApontamentos(); };
+  // pendentes primeiro, concluídos depois (cada grupo do mais recente para o mais antigo)
   const lista = todos.filter(x => (S.filtroApont === 'abertos' ? !x.a.resolvido : S.filtroApont === 'resolvidos' ? x.a.resolvido : true));
+  const pendentes = lista.filter(x => !x.a.resolvido), feitos = lista.filter(x => x.a.resolvido);
   const exp = el('button', 'btn', 'Exportar CSV');
-  exp.onclick = () => exportarApontamentos(lista);
+  exp.onclick = () => exportarApontamentos(pendentes.concat(feitos));
   barra.appendChild(sel); barra.appendChild(exp);
-  barra.appendChild(el('span', 'chip', lista.length + ' apontamento' + (lista.length === 1 ? '' : 's')));
+  barra.appendChild(el('span', 'chip', pendentes.length + ' pendente' + (pendentes.length === 1 ? '' : 's')));
+  barra.appendChild(el('span', 'chip', feitos.length + ' concluído' + (feitos.length === 1 ? '' : 's')));
   p.appendChild(barra);
 
   if (!todos.length) {
@@ -2021,11 +2028,23 @@ function renderApontamentos() {
     tabelaAtual = [];
     return;
   }
-  const linhas = lista.map(({ a, e }) => ({
+  const linha = ({ a, e }) => ({
     _el: e ? e.i : null,
-    c: [a.resolvido ? '✓ resolvido' : '● aberto', e ? (nomeEl(e) || e.categoria) : '(peça não está neste modelo)',
+    _cls: a.resolvido ? 'feito' : null,
+    c: [a.resolvido ? '✓ concluído' : '● pendente', e ? (nomeEl(e) || e.categoria) : '(peça não está neste modelo)',
       e ? e.sistemaClasse : '', e ? pill(e.dn) : '', a.texto, dataBr(a.data), e ? e.tag : '']
-  }));
+  });
+  const linhas = [];
+  // as faixas só aparecem quando o filtro deixa os dois grupos na tela
+  const comFaixa = pendentes.length && feitos.length;
+  if (pendentes.length) {
+    if (comFaixa) linhas.push({ _grupo: 'Pendentes (' + pendentes.length + ')' });
+    for (const x of pendentes) linhas.push(linha(x));
+  }
+  if (feitos.length) {
+    if (comFaixa) linhas.push({ _grupo: 'Concluídos (' + feitos.length + ')' });
+    for (const x of feitos) linhas.push(linha(x));
+  }
   p.appendChild(tabela([{ t: 'Status' }, { t: 'Peça' }, { t: 'Sistema' }, { t: 'Diâmetro' }, { t: 'Apontamento' },
     { t: 'Data' }, { t: 'ID no Revit', n: 1 }], linhas));
   marcarLinha();
@@ -2035,7 +2054,7 @@ function exportarApontamentos(lista) {
   const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const linhas = [['Status', 'Peça', 'Sistema', 'Diâmetro (mm)', 'Apontamento', 'Data', 'ID no Revit', 'GUID']];
   for (const { g, a, e } of lista)
-    linhas.push([a.resolvido ? 'resolvido' : 'aberto', e ? (nomeEl(e) || e.categoria) : '', e ? e.sistemaClasse : '',
+    linhas.push([a.resolvido ? 'concluído' : 'pendente', e ? (nomeEl(e) || e.categoria) : '', e ? e.sistemaClasse : '',
       e && e.dn ? e.dn : '', a.texto, dataBr(a.data), e ? e.tag : '', g]);
   const csv = '﻿' + linhas.map(l => l.map(esc).join(';')).join('\r\n');   // BOM + ";" abrem certo no Excel em português
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -2178,8 +2197,14 @@ function tabela(colunas, linhas, opts) {
   const tb = el('tbody');
   const itens = [];           // linhas selecionáveis desta tabela, na ordem em que aparecem
   for (const L of linhas) {
+    if (L._grupo) {                        // faixa que separa grupos (ex.: pendentes x concluidos)
+      const rg = el('tr', 'grupo'), tdg = el('td', null, L._grupo);
+      tdg.colSpan = colunas.length; rg.appendChild(tdg); tb.appendChild(rg);
+      continue;
+    }
     const r = el('tr');
     if (L._tot) r.className = 'tot';
+    if (L._cls) r.className = (r.className + ' ' + L._cls).trim();
     if (L._el != null) {
       const pos = itens.length;
       itens.push({ ids: [L._el], chave: null });
@@ -2204,7 +2229,7 @@ function tabela(colunas, linhas, opts) {
     tb.appendChild(r);
   }
   t.appendChild(tb);
-  tabelaAtual = [colunas.map(c => c.t)].concat(linhas.map(L => L.c.map(v => (v && v.txt !== undefined) ? v.txt : (v == null ? '' : String(v)))));
+  tabelaAtual = [colunas.map(c => c.t)].concat(linhas.filter(L => L.c).map(L => L.c.map(v => (v && v.txt !== undefined) ? v.txt : (v == null ? '' : String(v)))));
   return t;
 }
 
