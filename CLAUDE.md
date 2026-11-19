@@ -106,7 +106,11 @@ Painel da peça e painel de conjunto têm "Editar nome, sistema e diâmetro" (em
 `…#uniaoN`), e são reaplicadas em `montar()` sobre qualquer leitura do IFC. O valor lido
 fica em `e.orig` e volta com "Restaurar original". Editar muda `e.sistemaClasse`, `e.dn`
 (`dnFonte = 'manual'`) e `e.nomeEd`, então legenda, filtros, quantitativos e tabelas
-acompanham sem tratamento extra. Com várias peças, campo vazio = não mexe naquele campo.
+acompanham sem tratamento extra. Com uma peça, os campos abrem **preenchidos com o valor
+atual** e só o que for mudado é gravado (o resto, inclusive edição anterior, é mantido;
+voltar ao valor do IFC remove a edição daquele campo). O diâmetro é uma lista suspensa
+com `DN_COMERCIAIS` (20 a 200 mm) mais "Outro valor…"; um valor atual fora da lista entra
+nela. Com várias peças, os campos começam em "manter" e só o que for preenchido muda.
 O nome editado só aparece no painel, na tabela Elementos e na busca (as tabelas de
 peças continuam agrupando por `objType`). Não há exportação das edições.
 

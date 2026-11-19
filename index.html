@@ -208,6 +208,10 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .row .btn{flex:1 1 auto;justify-content:center;padding:5px 6px;font-size:11.5px}
 label.fld{display:block;font-size:11px;color:var(--text-dim);margin:9px 0 4px}
 input[type=range]{width:100%;accent-color:var(--accent)}
+select,input[type=number]{
+  background:var(--bg);border:1px solid var(--line);border-radius:var(--r);
+  padding:6px 9px;font-size:12px;
+}
 input[type=search],input[type=text]{
   width:100%;background:var(--bg);border:1px solid var(--line);
   border-radius:var(--r);padding:6px 9px;font-size:12px;
@@ -1725,6 +1729,8 @@ function atualizarListasModelo(M) {
   M.sistemas = [...new Set(M.elements.map(e => e.sistemaClasse))].sort();
 }
 
+/* campos[k]: undefined = não mexe (mantém o que já estava, inclusive edição anterior);
+   null = tira a edição desse campo (volta ao valor do IFC); outro valor = grava. */
 function gravarEdicao(ids, campos, restaurar) {
   const M = S.model;
   for (const i of ids) {
@@ -1732,7 +1738,10 @@ function gravarEdicao(ids, campos, restaurar) {
     if (restaurar) delete edicoes[e.guid];
     else {
       const ed = Object.assign({}, edicoes[e.guid]);
-      for (const k of ['nome', 'sistema', 'dn']) if (campos[k]) ed[k] = campos[k];
+      for (const k of ['nome', 'sistema', 'dn']) {
+        if (campos[k] === null) delete ed[k];
+        else if (campos[k] !== undefined) ed[k] = campos[k];
+      }
       if (ed.nome || ed.sistema || ed.dn) edicoes[e.guid] = ed; else delete edicoes[e.guid];
     }
     aplicarEdicao(e);
@@ -1745,31 +1754,71 @@ function gravarEdicao(ids, campos, restaurar) {
   atualizarDestaque();
 }
 
-/* ids: peças afetadas. Com várias, campo vazio = não mexe naquele campo. */
+const DN_COMERCIAIS = [20, 25, 32, 40, 50, 60, 75, 85, 100, 110, 125, 150, 160, 200];   // mm
+
+/* ids: peças afetadas. Com uma peça, os campos vêm preenchidos com o valor atual e só o
+   que for mudado é gravado. Com várias, começam em "manter" e só o que for preenchido muda. */
 function editorEdicao(ids) {
   const M = S.model, uma = ids.length === 1 ? M.elements[ids[0]] : null;
   const box = el('details', 'pset'); box.style.marginTop = '10px';
   box.appendChild(el('summary', null, 'Editar nome, sistema e diâmetro' + (uma ? '' : ' (' + ids.length + ' peças)')));
-  const campo = (rot, tipo, valor, ph) => {
-    box.appendChild(el('div', null, rot)).style.cssText = 'font-size:11px;color:var(--text-dim);margin:7px 0 2px';
-    const inp = el('input'); inp.type = tipo; inp.value = valor; inp.placeholder = ph;
-    inp.style.width = '100%';
-    if (tipo === 'number') { inp.min = 1; inp.step = 1; }
-    box.appendChild(inp); return inp;
-  };
-  const iNome = campo('Nome', 'text', uma ? (uma.nomeEd || '') : '', uma ? (uma.tipo || uma.familia || '') : '(manter os nomes atuais)');
-  const iSis = campo('Sistema', 'text', '', uma ? uma.sistemaClasse : '(manter os sistemas atuais)');
+  const rotulo = (t) => box.appendChild(el('div', null, t)).style.cssText = 'font-size:11px;color:var(--text-dim);margin:7px 0 2px';
+
+  rotulo('Nome');
+  const iNome = el('input'); iNome.type = 'text'; iNome.style.width = '100%';
+  const nomeAtual = uma ? (nomeEl(uma) || '') : '';
+  iNome.value = nomeAtual; iNome.placeholder = uma ? '' : '(manter os nomes atuais)';
+  box.appendChild(iNome);
+
+  rotulo('Sistema');
+  const iSis = el('input'); iSis.type = 'text'; iSis.style.width = '100%';
+  const sisAtual = uma ? uma.sistemaClasse : '';
+  iSis.value = sisAtual; iSis.placeholder = uma ? '' : '(manter os sistemas atuais)';
   iSis.setAttribute('list', 'listaSistemas');
   let dl = document.getElementById('listaSistemas');
   if (!dl) { dl = el('datalist'); dl.id = 'listaSistemas'; document.body.appendChild(dl); }
   dl.innerHTML = '';
   for (const s of M.sistemas) dl.appendChild(Object.assign(el('option'), { value: s }));
-  if (uma && uma.editado && edicoes[uma.guid] && edicoes[uma.guid].sistema) iSis.value = uma.sistemaClasse;
-  const iDn = campo('Diâmetro (mm)', 'number', uma && edicoes[uma.guid] && edicoes[uma.guid].dn ? uma.dn : '', uma ? (uma.dn ? String(uma.dn) : '—') : '(manter os diâmetros atuais)');
+  box.appendChild(iSis);
+
+  rotulo('Diâmetro (mm)');
+  const sDn = el('select'); sDn.style.width = '100%';
+  const opt = (v, t) => sDn.appendChild(Object.assign(el('option'), { value: String(v), textContent: t }));
+  const dnAtual = uma ? (uma.dn || 0) : -1;
+  if (!uma) opt('', '(manter os diâmetros atuais)');
+  else if (!dnAtual) opt('0', '— (sem diâmetro definido)');
+  const lista = DN_COMERCIAIS.slice();
+  if (dnAtual > 0 && lista.indexOf(dnAtual) < 0) lista.push(dnAtual), lista.sort((a, b) => a - b);   // valor fora da lista não se perde
+  for (const d of lista) opt(d, d + ' mm' + (d === dnAtual && uma.dnPortas.length > 1 ? ' (maior boca)' : ''));
+  opt('outro', 'Outro valor…');
+  sDn.value = uma ? String(dnAtual) : '';
+  box.appendChild(sDn);
+  const iOutro = el('input'); iOutro.type = 'number'; iOutro.min = 1; iOutro.step = 1;
+  iOutro.placeholder = 'Diâmetro em mm'; iOutro.style.cssText = 'width:100%;margin-top:5px;display:none';
+  box.appendChild(iOutro);
+  sDn.onchange = () => { iOutro.style.display = sDn.value === 'outro' ? '' : 'none'; if (sDn.value === 'outro') iOutro.focus(); };
 
   const acoes = el('div', 'row'); acoes.style.marginTop = '9px';
   const ok = el('button', 'btn pri', 'Aplicar');
-  ok.onclick = () => gravarEdicao(ids, { nome: iNome.value.trim(), sistema: iSis.value.trim(), dn: Math.round(+iDn.value) || 0 }, false);
+  ok.onclick = () => {
+    const c = {};   // undefined = mantém
+    const nome = iNome.value.trim(), sis = iSis.value.trim();
+    if (uma) {
+      const nomeOrig = uma.tipo || uma.familia || '', sisOrig = uma.orig ? uma.orig.sistemaClasse : uma.sistemaClasse;
+      if (nome !== nomeAtual) c.nome = (nome === '' || nome === nomeOrig) ? null : nome;
+      if (sis !== sisAtual && sis !== '') c.sistema = sis === sisOrig ? null : sis;
+    } else {
+      if (nome) c.nome = nome;
+      if (sis) c.sistema = sis;
+    }
+    let dn = sDn.value === 'outro' ? Math.round(+iOutro.value) || 0 : (+sDn.value || 0);
+    if (sDn.value === 'outro' && !dn) { iOutro.focus(); return; }
+    if (dn > 0 && dn !== dnAtual) {
+      const dnOrig = uma && uma.orig ? uma.orig.dn : (uma ? uma.dn : 0);
+      c.dn = uma && dn === dnOrig ? null : dn;
+    }
+    gravarEdicao(ids, c, false);
+  };
   const rest = el('button', 'btn', 'Restaurar original');
   rest.onclick = () => gravarEdicao(ids, {}, true);
   acoes.appendChild(ok); acoes.appendChild(rest);
