@@ -448,6 +448,7 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
     <button class="tab" data-pane="pecas">Peças e dispositivos</button>
     <button class="tab" data-pane="pecas-sistema">Peças e dispositivos por sistema</button>
     <button class="tab" data-pane="elementos">Elementos</button>
+    <button class="tab" data-pane="apontamentos">Apontamentos</button>
     <span class="spacer"></span>
     <button class="btn" id="copyBtn">Copiar tabela</button>
   </div>
@@ -457,6 +458,7 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
     <div class="tabpane" id="pane-pecas"></div>
     <div class="tabpane" id="pane-pecas-sistema"></div>
     <div class="tabpane" id="pane-elementos"></div>
+    <div class="tabpane" id="pane-apontamentos"></div>
   </div>
 </div>
 
@@ -3116,6 +3118,127 @@ function editorEdicao(ids) {
   return box;
 }
 
+/* ---- Apontamentos (anotações vinculadas a uma peça) ----
+   Ficam no navegador (localStorage), por GUID: { guid: [{ id, texto, data, resolvido }] }.
+   A aba "Apontamentos" lista todos e exporta CSV (o jeito de levar para outro PC). */
+const APONT_KEY = 'leitor-ifc-apontamentos';
+let apontamentos = {};
+try { apontamentos = JSON.parse(localStorage.getItem(APONT_KEY) || '{}') || {}; } catch (err) { apontamentos = {}; }
+const salvarApontamentos = () => { try { localStorage.setItem(APONT_KEY, JSON.stringify(apontamentos)); } catch (err) { } };
+const apontDe = (e) => apontamentos[e.guid] || [];
+const abertosDe = (e) => apontDe(e).filter(a => !a.resolvido).length;
+const totalApont = () => Object.values(apontamentos).reduce((t, l) => t + l.length, 0);
+
+function rotuloAbaApont() {
+  const aba = document.querySelector('.tab[data-pane="apontamentos"]');
+  if (aba) aba.textContent = 'Apontamentos' + (totalApont() ? ' (' + totalApont() + ')' : '');
+}
+
+function atualizarAposApontamento() {
+  salvarApontamentos();
+  rotuloAbaApont();
+  painelElemento();
+  if (S.pane === 'apontamentos') renderApontamentos();
+  else if (S.pane === 'elementos') renderCorpoElementos();
+}
+
+function novoApontamento(e, texto) {
+  texto = texto.trim();
+  if (!texto) return false;
+  (apontamentos[e.guid] = apontamentos[e.guid] || []).push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    texto, data: new Date().toISOString(), resolvido: false
+  });
+  atualizarAposApontamento();
+  return true;
+}
+
+const dataBr = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); };
+
+function secaoApontamentos(e) {
+  const box = el('details', 'pset'); box.style.marginTop = '10px';
+  const lista = apontDe(e), ab = abertosDe(e);
+  box.appendChild(el('summary', null, 'Apontamentos' + (lista.length ? ' (' + ab + ' aberto' + (ab === 1 ? '' : 's') + ' de ' + lista.length + ')' : '')));
+  if (lista.length) box.open = true;
+
+  for (const a of lista) {
+    const li = el('div'); li.style.cssText = 'border-top:1px solid var(--line-soft);padding:7px 0;display:flex;gap:8px;align-items:flex-start';
+    const ck = el('input'); ck.type = 'checkbox'; ck.checked = !!a.resolvido; ck.title = 'Marcar como resolvido';
+    ck.style.marginTop = '3px';
+    ck.onchange = () => { a.resolvido = ck.checked; atualizarAposApontamento(); };
+    const corpo = el('div'); corpo.style.cssText = 'flex:1 1 auto;min-width:0';
+    const tx = el('div', null, a.texto);
+    tx.style.cssText = 'font-size:12px;white-space:pre-wrap;word-break:break-word' + (a.resolvido ? ';text-decoration:line-through;color:var(--text-faint)' : '');
+    const dt = el('div', null, dataBr(a.data) + (a.resolvido ? ' · resolvido' : ''));
+    dt.style.cssText = 'font-size:10.5px;color:var(--text-faint);margin-top:2px';
+    corpo.appendChild(tx); corpo.appendChild(dt);
+    const del = el('button', 'fechar', '×'); del.title = 'Excluir este apontamento';
+    del.onclick = () => {
+      apontamentos[e.guid] = lista.filter(x => x !== a);
+      if (!apontamentos[e.guid].length) delete apontamentos[e.guid];
+      atualizarAposApontamento();
+    };
+    li.appendChild(ck); li.appendChild(corpo); li.appendChild(del);
+    box.appendChild(li);
+  }
+
+  const ta = el('textarea'); ta.rows = 3; ta.placeholder = 'Escreva o apontamento sobre esta peça…';
+  ta.style.cssText = 'width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:6px 9px;font:inherit;font-size:12px;resize:vertical';
+  const add = el('button', 'btn pri', 'Adicionar apontamento'); add.style.marginTop = '6px';
+  add.onclick = () => novoApontamento(e, ta.value);
+  ta.onkeydown = (ev) => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); add.click(); } };
+  ta.title = 'Ctrl+Enter adiciona';
+  box.appendChild(ta); box.appendChild(add);
+  return box;
+}
+
+function renderApontamentos() {
+  const p = $('#pane-apontamentos'); p.innerHTML = '';
+  const porGuid = new Map(S.model.elements.map(e => [e.guid, e]));
+  const todos = [];
+  for (const g of Object.keys(apontamentos)) for (const a of apontamentos[g]) todos.push({ g, a, e: porGuid.get(g) });
+  todos.sort((x, y) => (x.a.data < y.a.data ? 1 : -1));
+
+  const barra = el('div'); barra.style.cssText = 'display:flex;gap:9px;align-items:center;margin-bottom:9px;flex-wrap:wrap';
+  const sel = el('select');
+  for (const [v, t] of [['todos', 'Todos'], ['abertos', 'Só abertos'], ['resolvidos', 'Só resolvidos']]) sel.appendChild(Object.assign(el('option'), { value: v, textContent: t }));
+  sel.value = S.filtroApont || 'todos';
+  sel.onchange = () => { S.filtroApont = sel.value; renderApontamentos(); };
+  const lista = todos.filter(x => (S.filtroApont === 'abertos' ? !x.a.resolvido : S.filtroApont === 'resolvidos' ? x.a.resolvido : true));
+  const exp = el('button', 'btn', 'Exportar CSV');
+  exp.onclick = () => exportarApontamentos(lista);
+  barra.appendChild(sel); barra.appendChild(exp);
+  barra.appendChild(el('span', 'chip', lista.length + ' apontamento' + (lista.length === 1 ? '' : 's')));
+  p.appendChild(barra);
+
+  if (!todos.length) {
+    p.appendChild(Object.assign(el('p', 'empty'), { innerHTML: 'Nenhum apontamento ainda. Selecione uma peça e use <b>Apontamentos</b> no painel de propriedades.' }));
+    tabelaAtual = [];
+    return;
+  }
+  const linhas = lista.map(({ a, e }) => ({
+    _el: e ? e.i : null,
+    c: [a.resolvido ? '✓ resolvido' : '● aberto', e ? (nomeEl(e) || e.categoria) : '(peça não está neste modelo)',
+      e ? e.sistemaClasse : '', e ? pill(e.dn) : '', a.texto, dataBr(a.data), e ? e.tag : '']
+  }));
+  p.appendChild(tabela([{ t: 'Status' }, { t: 'Peça' }, { t: 'Sistema' }, { t: 'Diâmetro' }, { t: 'Apontamento' },
+    { t: 'Data' }, { t: 'ID no Revit', n: 1 }], linhas));
+  marcarLinha();
+}
+
+function exportarApontamentos(lista) {
+  const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const linhas = [['Status', 'Peça', 'Sistema', 'Diâmetro (mm)', 'Apontamento', 'Data', 'ID no Revit', 'GUID']];
+  for (const { g, a, e } of lista)
+    linhas.push([a.resolvido ? 'resolvido' : 'aberto', e ? (nomeEl(e) || e.categoria) : '', e ? e.sistemaClasse : '',
+      e && e.dn ? e.dn : '', a.texto, dataBr(a.data), e ? e.tag : '', g]);
+  const csv = '﻿' + linhas.map(l => l.map(esc).join(';')).join('\r\n');   // BOM + ";" abrem certo no Excel em português
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = el('a'); a.href = url; a.download = 'apontamentos-piscina.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function detalheElemento(p, e, compacto) {
   const kps = el('div', 'keyparams');
 
@@ -3198,6 +3321,7 @@ function detalheElemento(p, e, compacto) {
     const b2 = el('button', 'btn', 'Ocultar'); b2.onclick = () => { S.visivelEl[e.i] = 0; atualizarVisibilidade(); renderTabs(); };
     acoes.appendChild(b1); acoes.appendChild(b2);
     p.appendChild(acoes);
+    p.appendChild(secaoApontamentos(e));
     p.appendChild(editorEdicao([e.i]));
   }
 }
@@ -3294,6 +3418,7 @@ function renderTabs() {
   renderPecas(Q);
   renderPecasSistema(Q);
   renderElementos();
+  rotuloAbaApont();
   mostrarPane(S.pane);
 }
 
@@ -3433,7 +3558,7 @@ function renderCorpoElementos() {
   const comMarca = S.model.elements.some(e => e.marca);   // só o IFC com "Marca" (Revit)
   const linhas = corte.map(e => ({
     _el: e.i,
-    c: [e.categoria, (e.editado ? '✎ ' : '') + (nomeEl(e) || ''), pill(e.dn), e.sistemaClasse]
+    c: [e.categoria, (e.editado ? '✎ ' : '') + (abertosDe(e) ? '💬' + abertosDe(e) + ' ' : '') + (nomeEl(e) || ''), pill(e.dn), e.sistemaClasse]
       .concat(comMarca ? [e.marca || ''] : [], [ehLinear(e) && e.comprimento ? fmt(e.comprimento, 3) : '', e.tag])
   }));
   alvo.innerHTML = '';
@@ -3462,6 +3587,7 @@ function mostrarPane(id) {
   // o botão Copiar sempre leva a tabela da aba aberta
   const fn = { resumo: renderResumo, sistemas: renderSistemas, pecas: renderPecas, 'pecas-sistema': renderPecasSistema };
   if (fn[id]) fn[id](quantitativos(S.model, (e) => elementoVisivel(e.i)));
+  else if (id === 'apontamentos') renderApontamentos();
   else renderCorpoElementos();
   marcarLinha();
 }

@@ -110,6 +110,17 @@ acompanham sem tratamento extra. Com várias peças, campo vazio = não mexe naq
 O nome editado só aparece no painel, na tabela Elementos e na busca (as tabelas de
 peças continuam agrupando por `objType`). Não há exportação das edições.
 
+## Apontamentos (anotações por peça)
+
+Seção "Apontamentos" no painel da peça (`secaoApontamentos`) e aba "Apontamentos" com a
+lista geral (`renderApontamentos`, filtro aberto/resolvido, `exportarApontamentos` gera
+CSV com BOM e `;` para o Excel em português). Ficam em
+`localStorage['leitor-ifc-apontamentos']` como `{ guid: [{ id, texto, data, resolvido }] }`,
+ligados ao GUID da peça (valem entre revisões do IFC se o GUID se mantém; apontamento de
+peça que sumiu continua listado como "peça não está neste modelo"). Peças com apontamento
+aberto ganham 💬n na tabela Elementos. Só no navegador de quem escreveu: o CSV é o
+jeito de levar para outro PC; não há importação.
+
 ## Uniões embutidas em equipamentos
 
 Várias famílias de equipamento trazem as uniões dos bocais desenhadas dentro do
