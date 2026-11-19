@@ -192,6 +192,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
   letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);
   box-shadow:0 1px 4px rgba(0,0,0,.18);
 }
+.aba.esq{right:auto;left:0;border:1px solid var(--line);border-left:none;border-radius:0 var(--r) var(--r) 0}
 .aba:hover{color:var(--text);border-color:var(--accent)}
 .aba.tem{color:var(--accent);border-color:var(--accent)}
 .sechead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
@@ -332,7 +333,9 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
 }
 @media (max-width:860px){
   .rsz{display:none}
-  .aba{display:none}
+  .aba{display:none !important}
+  #fecharEsq{display:none}
+  #painelEsq{display:flex !important}   /* empilhado: sem aba para reabrir, então não recolhe */
   body{overflow:auto}
   .body{flex-direction:column}
   aside,aside.right{width:auto;flex-basis:auto;max-height:none;border:none;border-bottom:1px solid var(--line)}
@@ -365,7 +368,10 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
   <!-- ============ painel esquerdo ============ -->
   <aside id="painelEsq">
     <div class="sec">
-      <h2>Colorir por</h2>
+      <div class="sechead">
+        <h2>Colorir por</h2>
+        <button class="fechar" id="fecharEsq" title="Recolher o painel" aria-label="Recolher o painel">&times;</button>
+      </div>
       <div class="modes" id="modes"></div>
     </div>
 
@@ -402,6 +408,7 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
   <!-- ============ visor ============ -->
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
+    <button class="aba esq" id="abaEsq" title="Abrir o painel de cores e do visor" style="display:none">Cores e visor</button>
     <div class="viewbtns">
       <button class="btn" data-view="iso">Isométrica</button>
       <button class="btn" data-view="top">Planta</button>
@@ -2143,6 +2150,16 @@ function painelDirAberto(aberto, lembrar) {
   redimensionar();
 }
 
+function painelEsqAberto(aberto, lembrar) {
+  $('#painelEsq').style.display = aberto ? '' : 'none';
+  $('#rszEsq').style.display = aberto ? '' : 'none';
+  $('#abaEsq').style.display = aberto ? 'none' : '';
+  if (lembrar !== false) guardar('leitor-ifc-painel-esq', aberto ? '1' : '0');
+  redimensionar();
+}
+$('#abaEsq').onclick = () => painelEsqAberto(true);
+$('#fecharEsq').onclick = () => painelEsqAberto(false);
+
 // quando fechado, a aba avisa que há uma peça selecionada esperando
 function marcarAba() {
   const aba = $('#abaDir');
@@ -2199,6 +2216,7 @@ instalarAlca('#rszBaixo', e => {
   const ag = +ler('leitor-ifc-alt-gaveta');
   if (ag) { const g = $('#gaveta'); g.style.height = ag + 'px'; g.style.maxHeight = 'none'; }
   painelDirAberto(ler('leitor-ifc-painel-dir') === '1', false);
+  painelEsqAberto(ler('leitor-ifc-painel-esq') !== '0', false);   // aberto por padrão
 })();
 
 /* ---------- tema claro / escuro ---------- */
