@@ -13,9 +13,10 @@ desfeitas com "Restaurar original".
 
 ## Apontamentos
 
-No painel de uma peça, "Apontamentos" cria anotações vinculadas a ela (com data e
-opção de marcar como resolvido). A aba **Apontamentos** lista todos, filtra por
-status e exporta CSV. Ficam salvos no navegador.
+Clique com o **botão direito** numa peça no visor para criar um apontamento
+vinculado a ela (Ctrl+Enter salva, Esc cancela). No painel da peça dá para marcar
+como resolvido ou excluir. A aba **Apontamentos** lista todos, filtra por status e
+exporta CSV. Ficam salvos no navegador.
 
 ## Rodar
 

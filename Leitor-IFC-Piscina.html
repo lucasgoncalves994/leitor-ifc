@@ -306,6 +306,14 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
 .ocultbar .btn{justify-content:center;font-size:11.5px;padding:4px 10px;white-space:nowrap}
 .ocultbar .btn.prim{border-color:var(--accent,#4a90e2);font-weight:600}
 .ocultbar .cnt{font-size:11px;color:var(--text-faint);white-space:nowrap}
+.apopup{
+  position:absolute;z-index:20;width:260px;background:var(--surface);border:1px solid var(--accent);
+  border-radius:var(--r);box-shadow:0 4px 18px rgba(0,0,0,.35);padding:10px 11px;
+}
+.apopup .ptit{font-family:var(--display);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim)}
+.apopup .psub{font-size:11.5px;margin:3px 0 7px;word-break:break-word}
+.apopup textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:6px 9px;font:inherit;font-size:12px;resize:vertical}
+.apopup .pdica{font-size:10px;color:var(--text-faint);margin-top:6px}
 .viewbtns{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:5px}
 .viewbtns .btn{background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.18);justify-content:center;min-width:58px;font-size:11px;padding:4px 8px}
 .tip{
@@ -2311,6 +2319,7 @@ function instalarControles(cv) {
   }
 
   cv.addEventListener('pointerdown', e => {
+    fecharPopupApontamento();
     if (e.button === 1) e.preventDefault();      // corta a rolagem automática do navegador
     cv.setPointerCapture(e.pointerId);
     pararAnimacao();
@@ -2336,6 +2345,8 @@ function instalarControles(cv) {
     // com Shift o arraste é deslocamento, mas o clique parado soma à seleção
     const clique = botaoAtivo === 0 && movido < 5;
     if (clique && (arrastando === 1 || e.shiftKey || e.ctrlKey || e.metaKey)) selecionarPorClique(e);
+    // botão direito parado (sem arrastar) numa peça: novo apontamento; arrastar continua deslocando
+    if (e.button === 2 && botaoAtivo === 2 && movido < 5) abrirPopupApontamento(e);
     arrastando = 0; botaoAtivo = -1;
   });
   cv.addEventListener('pointercancel', () => { arrastando = 0; botaoAtivo = -1; });
@@ -2782,7 +2793,8 @@ function atualizarHud() {
 /* =========================================================
    6. Seleção
    ========================================================= */
-function selecionarPorClique(ev) {
+// índice da peça sob o cursor (-1 = nada)
+function pecaSobCursor(ev) {
   const r = $('#cv').getBoundingClientRect();
   const m = new THREE.Vector2(
     ((ev.clientX - r.left) / r.width) * 2 - 1,
@@ -2800,6 +2812,11 @@ function selecionarPorClique(ev) {
     const limite = (doContexto ? nContexto : nSolido) / 3;
     if (f != null && f < limite) alvo = mapa[f];
   }
+  return alvo;
+}
+
+function selecionarPorClique(ev) {
+  const alvo = pecaSobCursor(ev);
 
   if (somando(ev)) {
     // somar não dá zoom nem limpa a seleção quando o clique cai no vazio
@@ -3182,14 +3199,52 @@ function secaoApontamentos(e) {
     box.appendChild(li);
   }
 
-  const ta = el('textarea'); ta.rows = 3; ta.placeholder = 'Escreva o apontamento sobre esta peça…';
-  ta.style.cssText = 'width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:6px 9px;font:inherit;font-size:12px;resize:vertical';
-  const add = el('button', 'btn pri', 'Adicionar apontamento'); add.style.marginTop = '6px';
-  add.onclick = () => novoApontamento(e, ta.value);
-  ta.onkeydown = (ev) => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); add.click(); } };
-  ta.title = 'Ctrl+Enter adiciona';
-  box.appendChild(ta); box.appendChild(add);
+  const dica = el('div', null, 'Para criar um apontamento, clique com o botão direito na peça no visor.');
+  dica.style.cssText = 'font-size:11px;color:var(--text-faint);margin-top:8px;line-height:1.45';
+  box.appendChild(dica);
   return box;
+}
+
+/* Criar: botão direito (parado, sem arrastar) sobre a peça no visor abre uma caixa
+   junto ao cursor. Arrastar com o direito continua deslocando a câmera. */
+function fecharPopupApontamento() {
+  const p = document.getElementById('popupApont');
+  if (p) p.remove();
+}
+
+function abrirPopupApontamento(ev) {
+  fecharPopupApontamento();
+  const i = pecaSobCursor(ev);
+  if (i < 0) return;
+  const e = S.model.elements[i];
+  selecionar(i, false);                       // mostra qual peça vai receber o apontamento, sem mexer na câmera
+
+  const stage = $('#stage'), sr = stage.getBoundingClientRect();
+  const box = el('div'); box.id = 'popupApont'; box.className = 'apopup';
+  const ab = abertosDe(e);
+  box.appendChild(el('div', 'ptit', 'Novo apontamento'));
+  box.appendChild(el('div', 'psub', (nomeEl(e) || e.categoria) + (e.dn ? ' · DN ' + e.dn : '') + ' · ' + e.sistemaClasse +
+    (ab ? ' · ' + ab + (ab === 1 ? ' aberto' : ' abertos') : '')));
+  const ta = el('textarea'); ta.rows = 3; ta.placeholder = 'Escreva o apontamento…';
+  const acoes = el('div', 'row'); acoes.style.marginTop = '7px';
+  const ok = el('button', 'btn pri', 'Salvar'); const nao = el('button', 'btn', 'Cancelar');
+  ok.onclick = () => { if (novoApontamento(e, ta.value)) fecharPopupApontamento(); else ta.focus(); };
+  nao.onclick = fecharPopupApontamento;
+  ta.onkeydown = (k) => {
+    k.stopPropagation();
+    if (k.key === 'Escape') { k.preventDefault(); fecharPopupApontamento(); }
+    else if (k.key === 'Enter' && (k.ctrlKey || k.metaKey)) { k.preventDefault(); ok.click(); }
+  };
+  acoes.appendChild(ok); acoes.appendChild(nao);
+  box.appendChild(ta); box.appendChild(acoes);
+  box.appendChild(el('div', 'pdica', 'Ctrl+Enter salva · Esc cancela'));
+  stage.appendChild(box);
+
+  // junto ao cursor, sem sair do visor
+  const w = box.offsetWidth, h = box.offsetHeight;
+  box.style.left = Math.max(6, Math.min(sr.width - w - 6, ev.clientX - sr.left + 8)) + 'px';
+  box.style.top = Math.max(6, Math.min(sr.height - h - 6, ev.clientY - sr.top + 8)) + 'px';
+  ta.focus();
 }
 
 function renderApontamentos() {

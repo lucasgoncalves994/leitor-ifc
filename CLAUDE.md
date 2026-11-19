@@ -112,6 +112,10 @@ peças continuam agrupando por `objType`). Não há exportação das edições.
 
 ## Apontamentos (anotações por peça)
 
+**Criar:** botão direito parado (sem arrastar, `movido < 5`) sobre a peça no visor abre
+`abrirPopupApontamento` junto ao cursor (a peça é selecionada, sem zoom; Ctrl+Enter
+salva, Esc ou clique fora cancela). O direito arrastando continua deslocando a câmera,
+e o direito no vazio não faz nada. O painel só lista, resolve e exclui (não cria).
 Seção "Apontamentos" no painel da peça (`secaoApontamentos`) e aba "Apontamentos" com a
 lista geral (`renderApontamentos`, filtro aberto/resolvido, `exportarApontamentos` gera
 CSV com BOM e `;` para o Excel em português). Ficam em
