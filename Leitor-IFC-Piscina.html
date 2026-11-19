@@ -3191,6 +3191,62 @@ const APONT_KEY = 'leitor-ifc-apontamentos';
 let apontamentos = {};
 try { apontamentos = JSON.parse(localStorage.getItem(APONT_KEY) || '{}') || {}; } catch (err) { apontamentos = {}; }
 const salvarApontamentos = () => { try { localStorage.setItem(APONT_KEY, JSON.stringify(apontamentos)); } catch (err) { } };
+/* Apontamentos de partida: a verificação das ligações do R02 (grafo de portas do IFC
+   cruzado com a geometria). Entram uma única vez por navegador, marcados pela versão
+   em APONT_SEED_KEY — quem resolver ou excluir não vê voltar, e quem abrir o leitor em
+   outro PC recebe a mesma lista. Para uma nova rodada, mudar a versão. */
+const APONT_SEED_KEY = 'leitor-ifc-apont-semeados';
+const APONT_SEED_VERSAO = 'r02-ligacoes-2026-11-19';
+const APONT_SEED = [
+  // --- ligações faltando (a geometria encosta, a ligação não está registrada) ---
+  ['1Q1iPH6bTBwhUWyrfYB9AY', 'Tê DN50 com só 1 das 3 bocas ligada: os dois tubos DN50 param a 2 cm. Conferir a ligação e a folga de montagem.'],
+  ['30b0t_b1T9QA7XWA0rAnrL', 'Válvula de esfera DN50 com 1 das 2 bocas ligada: o tubo DN50 para a 5,8 cm. Folga maior que a bolsa — conferir.'],
+  ['38a4Zab8v5iRZIBSWafNhw', 'Dispositivo de retorno (filtrado): o tubo DN50 encosta a 4 mm, mas não há ligação registrada entre os dois.'],
+  ['38a4Zab8v5iRZIBSWafMAu', 'Dispositivo de retorno (filtrado): o tubo DN50 encosta a 4 mm, mas não há ligação registrada entre os dois.'],
+  ['38a4Zab8v5iRZIBSWafNg0', 'Dispositivo de retorno (filtrado): o tubo DN50 encosta a 4 mm, mas não há ligação registrada entre os dois.'],
+  ['38a4Zab8v5iRZIBSWafM2b', 'Dispositivo de retorno (aquecido): o tubo DN50 encosta a 4 mm, mas não há ligação registrada entre os dois.'],
+  ['38a4Zab8v5iRZIBSWafNLy', 'Dreno de fundo: o tubo DN50 encosta a 4 mm, sem ligação registrada. O dreno também está sem diâmetro no IFC.'],
+  ['38a4Zab8v5iRZIBSWafNLn', 'Dreno de fundo: o tubo DN50 encosta a 4 mm, sem ligação registrada. O dreno também está sem diâmetro no IFC.'],
+  // --- pontas abertas: esgoto, extravasor e coleta ---
+  ['1YlFcC5lL5hvysvOBIqiWN', 'Ponta aberta do esgoto (DN50): nada ligado e nada por perto a menos de 6 cm. A rede não chega ao ponto de coleta.'],
+  ['1YlFcC5lL5hvysvOBIqico', 'Ponta aberta do esgoto (DN50): nada ligado e nada por perto a menos de 12 cm.'],
+  ['1YlFcC5lL5hvysvOBIqiWs', 'Ponta aberta do extravasor (DN50): para a 6 cm da ponta do esgoto, sem ligação. Definir como os dois se juntam.'],
+  ['2D8IwnbCv6Ux1GH$Qb9c$f', 'Ponta aberta do esgoto (DN50): a ponta mais próxima (extravasor) está a 37 cm. Falta trecho e conexão.'],
+  ['0t6O9AKt9CwgAHg4zk0sIy', 'Ponta aberta do extravasor (DN50): a ponta mais próxima (esgoto) está a 37 cm. Falta trecho e conexão.'],
+  ['28rISPYGL4OgcooAd7AD4Z', 'Tubo DN50 solto (sistema Z11): para a 27 cm da caixa sifonada, sem ligação. Conferir sistema e ligação.'],
+  // --- elétrica DN25 interrompida ---
+  ['28rISPYGL4OgcooAd7AEXW', 'Eletroduto DN25: trecho interrompido — 3 pontas soltas nesta região, com vãos de 4 a 5 cm entre elas.'],
+  ['14kitzQiXA3eSEZfaXaOey', 'Eletroduto DN25: trecho interrompido — 8 pontas soltas nesta região, com vãos de cerca de 5 cm entre elas.'],
+  ['28rISPYGL4OgcooAd7AEed', 'Eletroduto DN25: três tocos de 4 cm sem ligação, com vãos de 3 cm. Conferir se falta conexão ou se é sobra de modelagem.'],
+  ['1YlFcC5lL5hvysvOBIqi$j', 'Eletroduto DN25 com ponta solta: a peça mais próxima é um joelho DN50, a 10,7 cm. Sem ligação possível nesse diâmetro.'],
+  // --- peças fora do catálogo / especificação ---
+  ['38a4Zab8v5iRZIBSWafNVP', 'Tê Ø75-Ø60-Ø60 sem descrição de material: a passagem é DN60 e a derivação DN75. Derivação maior que a passagem não existe em catálogo — usar tê DN75 com bucha 75x60, ou tê de redução com a passagem em 75.'],
+  ['0uh82hoVn9RxUDRnHr2yl9', 'Tê Ø75-Ø50-Ø50 sem descrição de material, ligado a tubo DN75 e a duas buchas 75x50 pelo lado de 75. Especificar a peça e revisar a redução.'],
+  ['2AKpYMvzT3BvWJBXEUP1fS', 'Bucha de redução 75x50 sem descrição de material com as duas pontas contra peças DN75: a redução não reduz nada. Ou a bucha sobra, ou o tubo deveria ser DN50.'],
+  ['2AKpYMvzT3BvWJBXEUP1fU', 'Bucha de redução 75x50 sem descrição de material com as duas pontas contra peças DN75: a redução não reduz nada. Ou a bucha sobra, ou o tubo deveria ser DN50.'],
+  ['0uh82hoVn9RxUDRnHr2yjI', 'Joelho 45° DN75 com os tubos se encontrando a 59,9°. Peça errada para o ângulo ou tubo fora de esquadro (os outros 167 joelhos e curvas estão dentro de 5°).'],
+  // --- equipamentos e pontos sem rede ---
+  ['2LpsG_zFfBnhfsSQn0DRPY', 'Lâmpada UV (UCV-75): 2 dos 4 bocais estão sem ligação. Confirmar se é o desvio (by-pass) ou se falta tubulação.'],
+  ['28rISPYGL4OgcooAd7AD0S', 'Torneira 1/2" sem nenhuma ligação e sem sistema. Falta o ramal de alimentação.'],
+  ['2ZbUClxSL3nwrFSwdg$Z7E', 'Torneira 1/2" sem nenhuma ligação e sem sistema. Falta o ramal de alimentação.']
+];
+
+function semearApontamentos() {
+  let feito = '';
+  try { feito = localStorage.getItem(APONT_SEED_KEY) || ''; } catch (err) { return; }
+  if (feito === APONT_SEED_VERSAO) return;
+  const data = new Date().toISOString();
+  APONT_SEED.forEach(([guid, texto], k) => {
+    const id = 'auto-' + APONT_SEED_VERSAO + '-' + k;
+    const lista = (apontamentos[guid] = apontamentos[guid] || []);
+    if (lista.some(a => a.id === id)) return;
+    lista.push({ id, texto: '[verificação das ligações] ' + texto, data, resolvido: false });
+  });
+  salvarApontamentos();
+  try { localStorage.setItem(APONT_SEED_KEY, APONT_SEED_VERSAO); } catch (err) { }
+}
+semearApontamentos();
+
 const apontDe = (e) => apontamentos[e.guid] || [];
 const abertosDe = (e) => apontDe(e).filter(a => !a.resolvido).length;
 const totalApont = () => Object.values(apontamentos).reduce((t, l) => t + l.length, 0);

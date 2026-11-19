@@ -18,6 +18,10 @@ vinculado a ela (Ctrl+Enter salva, Esc cancela). No painel da peça dá para mar
 como resolvido ou excluir. A aba **Apontamentos** lista todos, filtra por status e
 exporta CSV. Ficam salvos no navegador.
 
+O leitor já vem com **26 apontamentos da verificação das ligações do R02** (ligações
+faltando, pontas abertas, peças fora do catálogo). Eles entram uma vez em cada
+navegador; depois é só resolver ou excluir, que não voltam.
+
 ## Rodar
 
 O leitor busca `modelo.json` por `fetch`, que o navegador bloqueia em `file://`.

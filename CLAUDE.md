@@ -129,6 +129,17 @@ peça que sumiu continua listado como "peça não está neste modelo"). Peças c
 aberto ganham 💬n na tabela Elementos. Só no navegador de quem escreveu: o CSV é o
 jeito de levar para outro PC; não há importação.
 
+**Apontamentos de partida (`APONT_SEED`).** 26 apontamentos da verificação das
+ligações do R02 vêm escritos no `index.html` e entram uma vez por navegador:
+`semearApontamentos()` grava `APONT_SEED_VERSAO` em
+`localStorage['leitor-ifc-apont-semeados']` e não repete enquanto a versão não mudar
+(quem resolve ou exclui não vê voltar). Os `id` são `auto-<versão>-<n>`, o texto começa
+com "[verificação das ligações]" e cada um aponta para o GUID da peça. Para uma nova
+rodada: trocar a lista e a versão. **Conferir os GUIDs contra o modelo antes de soltar**
+— apontamento de GUID inexistente fica listado como "peça não está neste modelo".
+A verificação em si (grafo `IfcRelConnectsPorts` × geometria) foi feita com scripts
+avulsos em Node, que não ficam no repositório.
+
 ## Uniões embutidas em equipamentos
 
 Várias famílias de equipamento trazem as uniões dos bocais desenhadas dentro do
