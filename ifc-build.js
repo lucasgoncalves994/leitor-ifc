@@ -63,7 +63,11 @@ const FONTE_DN = {
    próprio corpo (ex.: as pontas de um joelho). */
 const CATEGORIAS_SEM_UNIAO = new Set(['Tubo', 'Duto', 'Eletroduto / calha', 'Cabo',
   'Conexão', 'Conexão de eletroduto', 'Registro / controle', 'Piso / laje', 'Parede']);
-const separaUnioes = (el) => !CATEGORIAS_SEM_UNIAO.has(el.categoria);
+/* Famílias em que a união faz parte do equipamento e não deve virar peça própria.
+   O dosador de cloro entra aqui a pedido do projetista: os dois bocais são do corpo. */
+const FAMILIAS_SEM_UNIAO = [/dosador de cloro/i];
+const separaUnioes = (el) => !CATEGORIAS_SEM_UNIAO.has(el.categoria) &&
+  !FAMILIAS_SEM_UNIAO.some(r => r.test(el.familia || '') || r.test(el.objType || ''));
 
 /* Dentro de `geo.leaves`, acha os sólidos que são uniões: o sólido (que não é o
    corpo) que contém uma porta de conexão do elemento, mais as peças pequenas
