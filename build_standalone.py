@@ -43,6 +43,10 @@ html = html.replace(antigo, novo)
 html = html.replace('<title>Leitor IFC da Piscina</title>',
                     '<title>Leitor IFC da Piscina (arquivo único)</title>')
 
+# 4b. o botão de baixar só faz sentido no site, não dentro do próprio arquivo único
+html, n = re.subn(r'\s*<a class="btn" id="baixarBtn"[\s\S]*?</a>', '', html, count=1)
+assert n == 1, 'botao de baixar nao encontrado'
+
 # 5. fontes embutidas (subconjunto Latin1 do IBM Plex — cobre os acentos do português)
 FONTES = [
     ('IBM Plex Sans',           '400', 'IBMPlexSans-Regular-Latin1.woff2'),
@@ -54,17 +58,25 @@ FONTES = [
     ('IBM Plex Mono',           '400', 'IBMPlexMono-Regular-Latin1.woff2'),
     ('IBM Plex Mono',           '500', 'IBMPlexMono-Medium-Latin1.woff2'),
 ]
-blocos = []
-for familia, peso, arq in FONTES:
-    dados = base64.b64encode(open('/tmp/fontes/fonts/split/woff2/' + arq, 'rb').read()).decode()
-    blocos.append(
-        "@font-face{font-family:'%s';font-style:normal;font-weight:%s;font-display:swap;"
-        "src:url(data:font/woff2;base64,%s) format('woff2')}" % (familia, peso, dados))
-css = '<style>\n' + '\n'.join(blocos) + '\n</style>'
+import os
+# pasta dos .woff2 (pacote IBM Plex "split/woff2"); pode ser trocada por FONTES_DIR
+PASTA_FONTES = os.environ.get('FONTES_DIR', '/tmp/fontes/fonts/split/woff2')
+if all(os.path.exists(os.path.join(PASTA_FONTES, f)) for _, _, f in FONTES):
+    blocos = []
+    for familia, peso, arq in FONTES:
+        dados = base64.b64encode(open(os.path.join(PASTA_FONTES, arq), 'rb').read()).decode()
+        blocos.append(
+            "@font-face{font-family:'%s';font-style:normal;font-weight:%s;font-display:swap;"
+            "src:url(data:font/woff2;base64,%s) format('woff2')}" % (familia, peso, dados))
+    css = '<style>\n' + '\n'.join(blocos) + '\n</style>'
 
-link = re.search(r'<link rel="preconnect"[\s\S]*?rel="stylesheet">', html)
-assert link, 'bloco de fontes nao encontrado'
-html = html[:link.start()] + css + html[link.end():]
+    link = re.search(r'<link rel="preconnect"[\s\S]*?rel="stylesheet">', html)
+    assert link, 'bloco de fontes nao encontrado'
+    html = html[:link.start()] + css + html[link.end():]
+else:
+    # sem os arquivos de fonte: mantém o link das Google Fonts (com internet fica igual;
+    # sem internet o navegador usa a fonte do sistema)
+    print('aviso: fontes nao encontradas em', PASTA_FONTES, '- mantendo o link das Google Fonts')
 
 open('Leitor-IFC-Piscina.html', 'w', encoding='utf-8').write(html)
 print('gerado: Leitor-IFC-Piscina.html')

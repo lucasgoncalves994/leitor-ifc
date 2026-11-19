@@ -122,6 +122,7 @@ header{
   padding:5px 11px;cursor:pointer;font-weight:500;font-size:12px;
   display:inline-flex;align-items:center;gap:6px;transition:background .12s,border-color .12s;
 }
+a.btn{color:inherit;text-decoration:none}
 .btn:hover{filter:brightness(1.06);border-color:var(--accent)}
 .btn.pri{background:var(--accent-dim);border-color:var(--accent);color:var(--text)}
 .btn.pri:hover{filter:brightness(1.08)}
@@ -360,6 +361,7 @@ tr.tot td{font-weight:600;border-top:1px solid var(--line);background:var(--surf
   </div>
   <div class="meta" id="meta"></div>
   <button class="btn" id="temaBtn" title="Alterna entre claro, escuro e o tema do sistema">Tema: automático</button>
+  <a class="btn" id="baixarBtn" href="Leitor-IFC-Piscina.html" download="Leitor-IFC-Piscina.html" title="Baixa um arquivo único que abre com duplo clique, sem internet">Baixar versão offline</a>
   <button class="btn pri" id="openBtn">Abrir outro IFC</button>
   <input type="file" id="fileInput" accept=".ifc" class="hidden">
 </header>
