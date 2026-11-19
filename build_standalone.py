@@ -48,6 +48,11 @@ html = html.replace('<title>Leitor IFC da Piscina</title>',
 html, n = re.subn(r'\s*<a class="btn" id="baixarBtn"[\s\S]*?</a>', '', html, count=1)
 assert n == 1, 'botao de baixar nao encontrado'
 
+# 4c. o seletor de modelos tambem nao: aqui so existe o modelo embutido
+#     (sem o <select>, montarSeletorModelo sai na primeira linha e nao mexe no titulo)
+html, n = re.subn(r'\s*<select id="modeloSel"[\s\S]*?</select>', '', html, count=1)
+assert n == 1, 'seletor de modelos nao encontrado'
+
 # 5. fontes embutidas (subconjunto Latin1 do IBM Plex — cobre os acentos do português)
 FONTES = [
     ('IBM Plex Sans',           '400', 'IBMPlexSans-Regular-Latin1.woff2'),

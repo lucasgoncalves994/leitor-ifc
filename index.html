@@ -375,6 +375,7 @@ tbody tr.feito td:nth-child(5){text-decoration:line-through}   /* a coluna do te
     <h1>Leitor IFC</h1>
     <span class="file" id="fileName">—</span>
   </div>
+  <select id="modeloSel" title="Escolhe o modelo publicado; abre numa aba nova"></select>
   <div class="meta" id="meta"></div>
   <button class="btn" id="temaBtn" title="Alterna entre claro, escuro e o tema do sistema">Tema: automático</button>
   <a class="btn" id="baixarBtn" href="Leitor-IFC-Piscina.html" download="Leitor-IFC-Piscina.html" title="Baixa um arquivo único que abre com duplo clique, sem internet">Baixar versão offline</a>
@@ -572,6 +573,25 @@ const MODOS = [
   { id: 'nativo',    nome: 'Cor original do IFC' }
 ];
 
+/* ---- modelos publicados no site ----
+   Cada página do leitor mostra um modelo. A escolha vem da URL (?modelo=hidro);
+   sem nada, abre a piscina. O seletor no cabeçalho troca de modelo numa aba nova,
+   então dá para comparar os dois lado a lado. Na versão de arquivo único o modelo
+   vai embutido e o seletor é removido pelo build_standalone.py. */
+const MODELOS = [
+  { chave: 'piscina', arquivo: 'modelo.json',       nome: 'Piscina — Art Stay (R02)' },
+  { chave: 'hidro',   arquivo: 'modelo-hidro.json', nome: 'Hidráulica — Tipo 1 e 2' }
+];
+const MODELO = (() => {
+  let q = '';
+  try { q = new URLSearchParams(location.search).get('modelo') || ''; } catch (err) { }
+  return MODELOS.find(m => m.chave === q) ||
+    // também aceita o nome do arquivo, desde que seja um .json da própria pasta
+    (/^[\w.-]+\.json$/.test(q) ? { chave: q, arquivo: q, nome: q } : MODELOS[0]);
+})();
+// cada modelo guarda suas edições e seus apontamentos; o primeiro mantém as chaves antigas
+const SUF_MODELO = MODELO.chave === 'piscina' ? '' : '-' + MODELO.chave;
+
 const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
 const fmt = (v, d) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -600,10 +620,30 @@ function progresso(f, msg) {
   return new Promise(r => requestAnimationFrame(() => r()));
 }
 
+function montarSeletorModelo() {
+  const sel = $('#modeloSel');
+  if (!sel) return;
+  for (const m of MODELOS) sel.appendChild(Object.assign(el('option'), { value: m.chave, textContent: m.nome }));
+  if (!MODELOS.some(m => m.chave === MODELO.chave))     // modelo passado pelo nome do arquivo
+    sel.appendChild(Object.assign(el('option'), { value: MODELO.chave, textContent: MODELO.nome }));
+  sel.value = MODELO.chave;
+  sel.onchange = () => {
+    const alvo = location.pathname + '?modelo=' + encodeURIComponent(sel.value);
+    sel.value = MODELO.chave;                            // esta aba continua no modelo dela
+    window.open(alvo, '_blank', 'noopener');
+  };
+  const atual = MODELOS.find(m => m.chave === MODELO.chave);
+  if (atual) {
+    document.title = 'Leitor IFC — ' + atual.nome;
+    $('#loading').querySelector('h2').textContent = 'Leitor IFC — ' + atual.nome;
+  }
+}
+
 async function iniciar() {
   try {
+    montarSeletorModelo();
     await progresso(0.01, 'Baixando o modelo');
-    const texto = await descompacta('modelo.json');
+    const texto = await descompacta(MODELO.arquivo);
     await montar(texto);
     if (S.nomeArquivo) $('#fileName').textContent = S.nomeArquivo;
   } catch (e) {
@@ -966,13 +1006,12 @@ function instalarControles(cv) {
   };
 
   // 1 = girar (giroscópio), 2 = deslocar
-  // botão do meio só desloca (na vertical e na horizontal), com ou sem Shift:
-  // o giro ficou no botão esquerdo, a pedido de quem usa
-  // botão esquerdo sozinho gira; com Shift, desloca; botão direito desloca
+  // A câmera só se move com o botão do meio: sozinho desloca, com Shift gira.
+  // O esquerdo serve para selecionar e o direito para abrir apontamento; nenhum
+  // dos dois mexe na vista (decidido em 19/11/2026).
   function modoDoBotao(e) {
-    if (e.button === 1) return 2;
-    if (e.button === 0) return e.shiftKey ? 2 : 1;
-    return 2;
+    if (e.button === 1) return e.shiftKey ? 1 : 2;
+    return 0;
   }
 
   cv.addEventListener('pointerdown', e => {
@@ -988,9 +1027,12 @@ function instalarControles(cv) {
   cv.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
   cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   cv.addEventListener('pointermove', e => {
-    if (!arrastando) return;
     const dx = e.clientX - px, dy = e.clientY - py;
-    px = e.clientX; py = e.clientY; movido += Math.abs(dx) + Math.abs(dy);
+    px = e.clientX; py = e.clientY;
+    if (botaoAtivo < 0) return;
+    movido += Math.abs(dx) + Math.abs(dy);   // conta também com o esquerdo e o direito,
+    if (!arrastando) return;                 // que não movem a câmera mas precisam distinguir
+                                             // um clique parado de um arrasto
     if (arrastando === 1) {
       orb.teta -= dx * 0.006;
       orb.fi = Math.max(EPS, Math.min(Math.PI - EPS, orb.fi - dy * 0.006));
@@ -998,11 +1040,9 @@ function instalarControles(cv) {
     posicionarCamera();
   });
   cv.addEventListener('pointerup', e => {
-    // só o botão esquerdo seleciona; girar com o do meio não muda a seleção.
-    // com Shift o arraste é deslocamento, mas o clique parado soma à seleção
-    const clique = botaoAtivo === 0 && movido < 5;
-    if (clique && (arrastando === 1 || e.shiftKey || e.ctrlKey || e.metaKey)) selecionarPorClique(e);
-    // botão direito parado (sem arrastar) numa peça: novo apontamento; arrastar continua deslocando
+    // só o botão esquerdo seleciona, e só parado (Shift ou Ctrl somam à seleção)
+    if (botaoAtivo === 0 && movido < 5) selecionarPorClique(e);
+    // botão direito parado (sem arrastar) numa peça: novo apontamento
     if (e.button === 2 && botaoAtivo === 2 && movido < 5) abrirPopupApontamento(e);
     arrastando = 0; botaoAtivo = -1;
   });
@@ -1709,7 +1749,7 @@ function painelElemento() {
 /* ---- Edição manual de nome, sistema e diâmetro ----
    As edições ficam no navegador (localStorage), por GUID da peça, e valem sobre qualquer
    leitura do IFC: o valor original é guardado em e.orig e volta com "Restaurar". */
-const EDIC_KEY = 'leitor-ifc-edicoes';
+const EDIC_KEY = 'leitor-ifc-edicoes' + SUF_MODELO;
 let edicoes = {};
 try { edicoes = JSON.parse(localStorage.getItem(EDIC_KEY) || '{}') || {}; } catch (err) { edicoes = {}; }
 const salvarEdicoes = () => { try { localStorage.setItem(EDIC_KEY, JSON.stringify(edicoes)); } catch (err) { } };
@@ -1840,7 +1880,7 @@ function editorEdicao(ids) {
 /* ---- Apontamentos (anotações vinculadas a uma peça) ----
    Ficam no navegador (localStorage), por GUID: { guid: [{ id, texto, data, resolvido }] }.
    A aba "Apontamentos" lista todos e exporta CSV (o jeito de levar para outro PC). */
-const APONT_KEY = 'leitor-ifc-apontamentos';
+const APONT_KEY = 'leitor-ifc-apontamentos' + SUF_MODELO;
 let apontamentos = {};
 try { apontamentos = JSON.parse(localStorage.getItem(APONT_KEY) || '{}') || {}; } catch (err) { apontamentos = {}; }
 const salvarApontamentos = () => { try { localStorage.setItem(APONT_KEY, JSON.stringify(apontamentos)); } catch (err) { } };
@@ -1885,6 +1925,7 @@ const APONT_SEED = [
 ];
 
 function semearApontamentos() {
+  if (MODELO.chave !== 'piscina') return;   // a lista é da verificação do modelo da piscina
   let feito = '';
   try { feito = localStorage.getItem(APONT_SEED_KEY) || ''; } catch (err) { return; }
   if (feito === APONT_SEED_VERSAO) return;
