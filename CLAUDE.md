@@ -5,7 +5,7 @@ do Art Stay (Unique). Não usa nenhuma biblioteca de IFC: o parser é próprio.
 
 Estudo de caso: `ARTST-CHI-PIS-EX-0001-MOD-PISCINA_COMPLETA-R02.ifc`
 (`modelo.json`) — IFC2X3, exportado pelo Revit 2024 (PTB, 18/11/2026), unidade
-**centímetro**, 667 elementos (679 com as 12 uniões separadas), 499.542 triângulos,
+**centímetro**, 667 elementos (a separação das uniões está desligada), 499.542 triângulos,
 384,26 m de tubo. Mesma estrutura de parâmetros do R01 (609 → 605 diâmetros vindos de
 `Tamanho`, 342 de 342 conferem com a geometria).
 O **R00** (722 elementos, 507.828 triângulos, 641,10 m de tubo) fica em
@@ -145,7 +145,12 @@ rodada: trocar a lista e a versão. **Conferir os GUIDs contra o modelo antes de
 A verificação em si (grafo `IfcRelConnectsPorts` × geometria) foi feita com scripts
 avulsos em Node, que não ficam no repositório.
 
-## Uniões embutidas em equipamentos
+## Uniões embutidas em equipamentos (hoje desligado)
+
+**Estado atual:** `SEPARAR_UNIOES = false` em `ifc-build.js`. O projetista pediu
+(19/11/2026) que toda união ficasse colada no seu dispositivo, porque ela já vem no
+equipamento. O leitor entrega os 667 elementos do IFC, sem sintéticos. O que vem abaixo
+descreve a maquinaria, que segue inteira e volta a valer ao ligar a chave.
 
 Várias famílias de equipamento trazem as uniões dos bocais desenhadas dentro do
 mesmo elemento (o Trocador de Calor é um `IfcFlowTerminal` com 56 sólidos), então
@@ -157,19 +162,20 @@ a união e o corpo eram selecionados e contados juntos.
   o corpo é o sólido de maior caixa envolvente e nunca sai.
 - Cada união vira um elemento sintético no **fim** da lista (`sintetico: true`,
   `parteDe` = índice do equipamento, `guid` com sufixo `#uniaoN`), categoria
-  "Conexão", DN herdado do equipamento. No R02 a contagem sobe de 667 para 679
-  (12 uniões); triângulos (499.542) e metros de tubo (384,26) não mudam.
+  "Conexão", DN herdado do equipamento. Com a chave ligada e sem exceções, o R02
+  ia de 667 para 685 elementos (18 uniões); triângulos (499.542) e metros de tubo
+  (384,26) nunca mudam — só o agrupamento.
 - Vale para todo equipamento, exceto as categorias de rede em
   `CATEGORIAS_SEM_UNIAO` (tubo, conexão, registro...): ali os sólidos são partes
   do próprio corpo, como as pontas de um joelho. E exceto as famílias em
-  `FAMILIAS_SEM_UNIAO`: hoje o **dosador de cloro** e o **gerador de cloro BZ40**,
-  cujas uniões já vêm no equipamento, segundo o projetista (19/11/2026).
+  `FAMILIAS_SEM_UNIAO` (dosador de cloro e gerador de cloro BZ40), que continua
+  valendo como filtro mais fino se a chave voltar a ser ligada.
 - Só conta como união o sólido compacto: menor lado ≥ 3 cm, maior lado ≤ 15 cm e
   volume ≤ 10% do equipamento (`pareceUniao`). Esses limites foram calibrados
   neste modelo; sem eles, a regra tirava a grade do dreno, o corpo das bombas,
   as chapas de retornos e da caixa sifonada e as peças dos refletores.
-  Separadas hoje: trocador (4), lâmpada UV (2) e filtros V-30 e V-80 (3 cada).
-  Se entrar outro modelo, conferir o resultado.
+  Com a chave ligada, separava: trocador (4), gerador de cloro (4), dosador (2),
+  lâmpada UV (2) e filtros V-30 e V-80 (3 cada). Se entrar outro modelo, conferir.
 
 ## Decisões do visor que não são óbvias
 

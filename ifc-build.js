@@ -63,11 +63,15 @@ const FONTE_DN = {
    próprio corpo (ex.: as pontas de um joelho). */
 const CATEGORIAS_SEM_UNIAO = new Set(['Tubo', 'Duto', 'Eletroduto / calha', 'Cabo',
   'Conexão', 'Conexão de eletroduto', 'Registro / controle', 'Piso / laje', 'Parede']);
-/* Famílias em que a união faz parte do equipamento e não deve virar peça própria:
-   o bocal já vem no equipamento, como o projetista indicou (dosador de cloro e
-   gerador de cloro BZ40). */
+/* A união já vem desenhada dentro do equipamento, em todas as famílias deste
+   projeto: o projetista pediu que ela ficasse colada no dispositivo (19/11/2026).
+   Por isso a separação está desligada. Para voltar a destacá-las, ligue
+   SEPARAR_UNIOES — a maquinaria (`acharUnioes`, `pareceUniao`, elementos
+   sintéticos) continua inteira — e, se quiser poupar só algumas famílias,
+   liste-as em FAMILIAS_SEM_UNIAO. */
+const SEPARAR_UNIOES = false;
 const FAMILIAS_SEM_UNIAO = [/dosador de cloro/i, /gerador de cloro/i, /BZ40/i];
-const separaUnioes = (el) => !CATEGORIAS_SEM_UNIAO.has(el.categoria) &&
+const separaUnioes = (el) => SEPARAR_UNIOES && !CATEGORIAS_SEM_UNIAO.has(el.categoria) &&
   !FAMILIAS_SEM_UNIAO.some(r => r.test(el.familia || '') || r.test(el.objType || ''));
 
 /* Dentro de `geo.leaves`, acha os sólidos que são uniões: o sólido (que não é o
