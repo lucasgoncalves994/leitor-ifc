@@ -227,9 +227,9 @@ a união e o corpo eram selecionados e contados juntos.
   `longe = r + diag×3`). Plano próximo fixo gastaria a precisão de
   profundidade e os tubos brigariam entre si com a vista afastada.
 
-- **Navegação:** botão do meio **só desloca** (vertical e horizontal), com ou sem
-  Shift — o giro pelo botão do meio foi tirado a pedido do usuário (19/11/2026);
-  girar é o botão esquerdo, e Shift + esquerdo desloca. É preciso barrar `mousedown` do botão do meio, senão o Chrome abre a
+- **Navegação estilo Revit:** botão do meio **sozinho só desloca** (vertical e
+  horizontal); **Shift + botão do meio gira**. Botão esquerdo gira, Shift + esquerdo
+  desloca. É preciso barrar `mousedown` do botão do meio, senão o Chrome abre a
   rolagem automática. Shift + clique **parado** (menos de 5 px) soma à seleção;
   com movimento é deslocamento.
 
