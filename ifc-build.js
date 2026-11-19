@@ -63,9 +63,10 @@ const FONTE_DN = {
    próprio corpo (ex.: as pontas de um joelho). */
 const CATEGORIAS_SEM_UNIAO = new Set(['Tubo', 'Duto', 'Eletroduto / calha', 'Cabo',
   'Conexão', 'Conexão de eletroduto', 'Registro / controle', 'Piso / laje', 'Parede']);
-/* Famílias em que a união faz parte do equipamento e não deve virar peça própria.
-   O dosador de cloro entra aqui a pedido do projetista: os dois bocais são do corpo. */
-const FAMILIAS_SEM_UNIAO = [/dosador de cloro/i];
+/* Famílias em que a união faz parte do equipamento e não deve virar peça própria:
+   o bocal já vem no equipamento, como o projetista indicou (dosador de cloro e
+   gerador de cloro BZ40). */
+const FAMILIAS_SEM_UNIAO = [/dosador de cloro/i, /gerador de cloro/i, /BZ40/i];
 const separaUnioes = (el) => !CATEGORIAS_SEM_UNIAO.has(el.categoria) &&
   !FAMILIAS_SEM_UNIAO.some(r => r.test(el.familia || '') || r.test(el.objType || ''));
 
