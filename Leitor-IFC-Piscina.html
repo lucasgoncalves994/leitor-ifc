@@ -2323,10 +2323,11 @@ function instalarControles(cv) {
   };
 
   // 1 = girar (giroscópio), 2 = deslocar
-  // botão do meio sozinho desloca; com Shift, gira — como no Revit
+  // botão do meio só desloca (na vertical e na horizontal), com ou sem Shift:
+  // o giro ficou no botão esquerdo, a pedido de quem usa
   // botão esquerdo sozinho gira; com Shift, desloca; botão direito desloca
   function modoDoBotao(e) {
-    if (e.button === 1) return e.shiftKey ? 1 : 2;
+    if (e.button === 1) return 2;
     if (e.button === 0) return e.shiftKey ? 2 : 1;
     return 2;
   }
