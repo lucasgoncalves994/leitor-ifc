@@ -31,6 +31,19 @@ mantém as chaves antigas), e a semente de apontamentos só vale para a piscina.
 O arquivo único continua sendo o da piscina: `build_standalone.py` apaga o `<select>`, e
 sem ele `montarSeletorModelo` sai na primeira linha.
 
+**Correções do projetista (`correcoes`).** A entrada do modelo pode trazer
+`trocar` (por GUID: nova `descricao` e novo `dn`, com `dnFonte = 'correcao'`) e `criar`
+(desenha a peça que faltou ser modelada, encostada nas portas de um certo DN da peça
+indicada). `aplicarCorrecoes(M)` roda em `montar()` logo depois de `buildIfcModel`, e só
+quando o modelo é o do site (`modeloDoSite`). As peças criadas são cilindros montados por
+`cilindro()` nas posições que `portasDe()` lê do grafo de portas; os buffers
+(`positions`, `indices`, `triElem`) são refeitos maiores e a peça ganha `criado: true`.
+**É geometria inventada**, não veio do IFC. Na piscina (23/11/2026, sobre os apontamentos
+do projetista): saem as 2 buchas 75x50 `2AKpYMvzT3BvWJBXEUP1fS/fU`, os dois tês sem
+descrição (`38a4Zab8v5iRZIBSWafNVP`, `0uh82hoVn9RxUDRnHr2yl9`) viram "Tê, DN75mm" e o tê
+do ralo lateral recebe 2 buchas 75x60 desenhadas nas bocas de DN60. Fica em 667
+elementos e 499.582 triângulos; os 384,26 m de tubo não mudam.
+
 **Peças tiradas de um modelo.** A entrada do modelo pode trazer `fora(e)`, que vira
 `window.FILTRO_ELEMENTO` em `iniciar()`; `buildIfcModel` consulta esse filtro **antes**
 de guardar a peça, então ela não entra em geometria, tabela nem quantitativo (abrir um

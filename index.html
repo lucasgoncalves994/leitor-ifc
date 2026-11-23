@@ -579,7 +579,27 @@ const MODOS = [
    então dá para comparar os dois lado a lado. Na versão de arquivo único o modelo
    vai embutido e o seletor é removido pelo build_standalone.py. */
 const MODELOS = [
-  { chave: 'piscina', arquivo: 'modelo.json',       nome: 'Piscina — Art Stay (R02)' },
+  {
+    chave: 'piscina', arquivo: 'modelo.json', nome: 'Piscina — Art Stay (R02)',
+    /* Correções do projetista sobre os apontamentos da verificação das ligações
+       (23/11/2026). O IFC não muda: o leitor aplica isto ao montar o modelo. */
+    fora: (e) => ['2AKpYMvzT3BvWJBXEUP1fS', '2AKpYMvzT3BvWJBXEUP1fU'].includes(e.guid),
+    correcoes: {
+      // os dois tês sem descrição são tê de 75, não tê de redução
+      trocar: [
+        { guid: '38a4Zab8v5iRZIBSWafNVP', dn: 75, descricao: 'Tê, DN75mm, PVC Marrom Soldável, conforme NBR 5648' },
+        { guid: '0uh82hoVn9RxUDRnHr2yl9', dn: 75, descricao: 'Tê, DN75mm, PVC Marrom Soldável, conforme NBR 5648' }
+      ],
+      // o tê do ralo lateral recebe duas buchas 75x60 que não foram modeladas:
+      // o leitor as desenha nas bocas de DN60, para o quantitativo fechar
+      criar: [{
+        noElemento: '38a4Zab8v5iRZIBSWafNVP', nasPortasDeDn: 60,
+        familia: 'PVC Marrom Soldável_Bucha de Reducão Curta', tipo: 'Bucha de Redução Curta',
+        descricao: 'Bucha de Redução Curta, DN75x60mm, PVC Marrom Soldável, conforme NBR 5648',
+        dn: 75, dnPortas: [75, 60], dnExterno: 75, dnInterno: 60, comprimento: 0.036
+      }]
+    }
+  },
   {
     chave: 'hidro', arquivo: 'modelo-hidro.json', nome: 'Hidráulica — Tipo 1 e 2',
     /* A rede de incêndio foi tirada deste modelo a pedido do projetista
@@ -599,6 +619,7 @@ const MODELO = (() => {
 })();
 // cada modelo guarda suas edições e seus apontamentos; o primeiro mantém as chaves antigas
 const SUF_MODELO = MODELO.chave === 'piscina' ? '' : '-' + MODELO.chave;
+let modeloDoSite = false;   // falso quando o usuário abre um IFC do computador
 
 const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
@@ -651,6 +672,7 @@ async function iniciar() {
   try {
     montarSeletorModelo();
     // o parser consulta este filtro ao montar cada peça
+    modeloDoSite = true;
     if (MODELO.fora) window.FILTRO_ELEMENTO = (e) => !MODELO.fora(e);
     await progresso(0.01, 'Baixando o modelo');
     const texto = await descompacta(MODELO.arquivo);
@@ -668,6 +690,7 @@ async function iniciar() {
 
 async function montar(texto) {
   const M = await buildIfcModel(texto, progresso);
+  if (modeloDoSite) aplicarCorrecoes(M);     // só no modelo publicado, não num IFC aberto à mão
   await progresso(0.97, 'Preparando o visor');
   S.model = M;
   aplicarEdicoesSalvas(M);
@@ -687,6 +710,130 @@ async function montar(texto) {
   renderTabs();
   painelElemento();
   $('#loading').classList.add('hidden');
+}
+
+/* ---- correções do projetista ----------------------------------------------
+   O IFC fica como está; o leitor aplica a correção ao montar o modelo, então
+   ela vale para quem abrir o link e entra nos quantitativos. São duas coisas:
+   `trocar` muda bitola e descrição de uma peça (por GUID) e `criar` desenha a
+   peça que faltou ser modelada, encostada nas portas de um certo DN da peça
+   indicada. A geometria criada é um cilindro simples: serve para ver e contar,
+   não veio do IFC (`criado: true`, e a origem do DN aparece como correção). */
+function portasDe(M, e) {
+  const m = M.ifc, g = M.geo, saida = [];
+  for (const p of (m.portsOf.get(e.id) || [])) {
+    const pa = m.args(p);
+    if (!pa) continue;
+    const mat = g.localPlacement(m.ref(pa[5]));
+    const pos = applyMat(mat, [0, 0, 0]).map(x => x * g.scale);
+    const fim = applyMat(mat, [0, 0, 1]).map(x => x * g.scale);
+    const d = [0, 1, 2].map(k => fim[k] - pos[k]);
+    const n = Math.hypot(d[0], d[1], d[2]) || 1;
+    const outra = m.portLink.get(p);
+    const dono = outra != null ? m.portOwner.get(outra) : null;
+    saida.push({ pos, dir: d.map(x => x / n), vizinho: dono != null ? M.byId.get(dono) : null });
+  }
+  return saida;
+}
+
+/* cilindro de raio r e comprimento c, centrado em `centro`, no eixo `eixo` */
+function cilindro(centro, eixo, r, c, lados) {
+  lados = lados || 24;
+  const n = Math.hypot(eixo[0], eixo[1], eixo[2]) || 1;
+  const w = eixo.map(x => x / n);
+  const aux = Math.abs(w[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const u = [w[1] * aux[2] - w[2] * aux[1], w[2] * aux[0] - w[0] * aux[2], w[0] * aux[1] - w[1] * aux[0]];
+  const nu = Math.hypot(u[0], u[1], u[2]) || 1;
+  const e1 = u.map(x => x / nu);
+  const e2 = [w[1] * e1[2] - w[2] * e1[1], w[2] * e1[0] - w[0] * e1[2], w[0] * e1[1] - w[1] * e1[0]];
+  const pos = [], idx = [];
+  const ponto = (t, ang) => [0, 1, 2].map(k =>
+    centro[k] + w[k] * t + r * (Math.cos(ang) * e1[k] + Math.sin(ang) * e2[k]));
+  for (let i = 0; i < lados; i++) {
+    const a = i / lados * Math.PI * 2;
+    pos.push(...ponto(-c / 2, a), ...ponto(c / 2, a));
+  }
+  for (let i = 0; i < lados; i++) {           // parede
+    const a = i * 2, b = ((i + 1) % lados) * 2;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const cA = pos.length / 3; pos.push(...[0, 1, 2].map(k => centro[k] - w[k] * c / 2));
+  const cB = pos.length / 3; pos.push(...[0, 1, 2].map(k => centro[k] + w[k] * c / 2));
+  for (let i = 0; i < lados; i++) {           // tampas
+    const a = i * 2, b = ((i + 1) % lados) * 2;
+    idx.push(cA, b, a, cB, a + 1, b + 1);
+  }
+  return { pos, idx };
+}
+
+function aplicarCorrecoes(M) {
+  const c = MODELO.correcoes;
+  if (!c) return;
+  const porGuid = new Map(M.elements.map(e => [e.guid, e]));
+
+  for (const t of (c.trocar || [])) {
+    const e = porGuid.get(t.guid);
+    if (!e) { console.warn('correção sem peça:', t.guid); continue; }
+    if (t.descricao != null) e.descricao = t.descricao;
+    if (t.dn) { e.dn = t.dn; e.dnPortas = []; e.dnFonte = 'correcao'; e.dnParam = ''; }
+    e.corrigido = true;
+  }
+
+  const novas = [];
+  for (const n of (c.criar || [])) {
+    const base = porGuid.get(n.noElemento);
+    if (!base) { console.warn('correção sem peça:', n.noElemento); continue; }
+    const portas = portasDe(M, base).filter(p => p.vizinho && p.vizinho.dn === n.nasPortasDeDn);
+    portas.forEach((p, k) => {
+      const centro = [0, 1, 2].map(j => p.pos[j] + p.dir[j] * n.comprimento / 2);
+      const geo = cilindro(centro, p.dir, (n.dnExterno / 1000) / 2, n.comprimento);
+      novas.push({ geo, n, base, k });
+    });
+  }
+  if (!novas.length) return;
+
+  // estende os buffers da geometria unificada
+  let nv = 0, ni = 0;
+  for (const x of novas) { nv += x.geo.pos.length / 3; ni += x.geo.idx.length; }
+  const pos = new Float32Array(M.positions.length + nv * 3);
+  pos.set(M.positions);
+  const idx = new Uint32Array(M.indices.length + ni);
+  idx.set(M.indices);
+  const tri = new Uint32Array(M.triElem.length + ni / 3);
+  tri.set(M.triElem);
+  let vo = M.positions.length / 3, io = M.indices.length, to = M.triElem.length;
+
+  for (const x of novas) {
+    const i = M.elements.length;
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (let j = 0; j < x.geo.pos.length; j++) {
+      const v = x.geo.pos[j], eixo = j % 3;
+      pos[vo * 3 + j] = v;
+      if (v < mn[eixo]) mn[eixo] = v;
+      if (v > mx[eixo]) mx[eixo] = v;
+      if (v < M.bbox.min[eixo]) M.bbox.min[eixo] = v;
+      if (v > M.bbox.max[eixo]) M.bbox.max[eixo] = v;
+    }
+    for (let j = 0; j < x.geo.idx.length; j++) idx[io + j] = x.geo.idx[j] + vo;
+    for (let j = 0; j < x.geo.idx.length / 3; j++) tri[to + j] = i;
+    const e = Object.assign({}, x.base, {
+      i, guid: x.base.guid + '#criada' + (x.k + 1),
+      categoria: 'Conexão', familia: x.n.familia, tipo: x.n.tipo,
+      objType: x.n.familia + ':' + x.n.tipo, descricao: x.n.descricao,
+      tag: '', marca: '', comentarios: '', hmtPa: null, vazaoLs: null,
+      dn: x.n.dn, dnPortas: (x.n.dnPortas || []).slice(), dnFonte: 'correcao', dnParam: '', dnGeom: 0,
+      props: {}, comprimento: 0, linear: false, eixo: null,
+      sintetico: true, criado: true, parteDe: x.base.i,
+      vStart: vo, iStart: io, vCount: x.geo.pos.length / 3, iCount: x.geo.idx.length,
+      min: mn, max: mx
+    });
+    M.elements.push(e);
+    vo += x.geo.pos.length / 3; io += x.geo.idx.length; to += x.geo.idx.length / 3;
+  }
+  M.positions = pos; M.indices = idx; M.triElem = tri;
+  const uniq = (a) => [...new Set(a)];
+  M.diametros = uniq(M.elements.filter(e => e.dn).map(e => e.dn)).sort((a, b) => a - b);
+  M.tipos = uniq(M.elements.map(e => e.objType)).sort();
 }
 
 function montarCabecalho() {
@@ -2668,7 +2815,7 @@ $('#fileInput').onchange = async (e) => {
   $('#lerr').classList.add('hidden');
   await progresso(0.02, 'Lendo ' + f.name);
   try {
-    window.FILTRO_ELEMENTO = null;   // arquivo escolhido pelo usuário entra inteiro
+    window.FILTRO_ELEMENTO = null; modeloDoSite = false;   // arquivo do usuário entra inteiro
     const buf = await f.arrayBuffer();
     const txt = new TextDecoder('utf-8').decode(buf);
     if (!/ISO-10303-21/i.test(txt.slice(0, 400))) throw new Error('Este arquivo não parece ser um IFC no formato STEP.');

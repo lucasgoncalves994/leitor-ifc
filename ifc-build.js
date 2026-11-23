@@ -53,7 +53,8 @@ const FONTE_DN = {
   geomRet: 'geometria (perfil retangular)',
   porta: 'porta conectada',
   pset: 'parâmetro do IFC',
-  nome: 'nome do tipo'
+  nome: 'nome do tipo',
+  correcao: 'correção do projetista'
 };
 
 /* Equipamentos cujas famílias trazem as uniões dos bocais desenhadas dentro do
