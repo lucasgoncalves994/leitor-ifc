@@ -44,6 +44,18 @@ descrição (`38a4Zab8v5iRZIBSWafNVP`, `0uh82hoVn9RxUDRnHr2yl9`) viram "Tê, DN7
 do ralo lateral recebe 2 buchas 75x60 desenhadas nas bocas de DN60. Fica em 667
 elementos e 499.582 triângulos; os 384,26 m de tubo não mudam.
 
+**O mesmo em IFC (`gerar_ifc_corrigido.py`).** As correções que o leitor aplica em
+memória também saem como arquivo: o script lê o IFC de `modelo.json` e grava
+`ARTST-...-R02-corrigido.ifc` (21,4 MB) retirando as 2 buchas erradas (com as portas e as
+relações que só falavam delas), reescrevendo `Tamanho` e `Descrição do Material` dos dois
+tês e criando as 2 buchas 75x60 como `IfcFlowFitting` com cilindro extrudado (Ø75 mm,
+36 mm) na `IfcAxis2Placement3D` da porta de DN60 — por isso elas caem no mesmo ponto que
+o leitor desenha. Armadilhas pagas: as entidades novas vão antes do **último** `ENDSEC`
+(o primeiro é o do HEADER); `ids()` enxerga o número da própria linha, então tire o
+`#n=` antes de ler os argumentos; e a descrição tem de ir no pset **"Dados de
+identidade"**, que é onde `buildIfcModel` procura. Conferido: 667 elementos, 0 conexão
+sem descrição, 0 referência a entidade inexistente.
+
 **Peças tiradas de um modelo.** A entrada do modelo pode trazer `fora(e)`, que vira
 `window.FILTRO_ELEMENTO` em `iniciar()`; `buildIfcModel` consulta esse filtro **antes**
 de guardar a peça, então ela não entra em geometria, tabela nem quantitativo (abrir um

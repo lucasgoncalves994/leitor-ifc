@@ -66,3 +66,5 @@ Esse arquivo abre com duplo clique, sem servidor e sem internet.
 | `modelo-R00.json` | Revisão R00, guardada como referência (renomeie para `modelo.json` para usá-la) |
 | `build_standalone.py` | Gera o HTML de arquivo único |
 | `preparar_modelo.py` | Converte um .ifc em `modelo.json` |
+| `gerar_ifc_corrigido.py` | Grava um IFC novo com as correções das conexões |
+| `ARTST-...-R02-corrigido.ifc` | O IFC já corrigido (saída do script acima) |
