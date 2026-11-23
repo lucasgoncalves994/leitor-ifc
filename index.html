@@ -2081,6 +2081,32 @@ const APONT_SEED = [
   ['2ZbUClxSL3nwrFSwdg$Z7E', 'Torneira 1/2" sem nenhuma ligação e sem sistema. Falta o ramal de alimentação.']
 ];
 
+/* Peças já corrigidas no modelo: o apontamento que fala delas passa a concluído,
+   uma vez por navegador (vale tanto para a lista de partida quanto para o que o
+   usuário escreveu, já que a marca é o GUID da peça). O texto não é mexido. */
+const APONT_FEITOS_KEY = 'leitor-ifc-apont-feitos';
+const APONT_FEITOS = {
+  versao: 'correcoes-r02-2026-11-23',
+  guids: [
+    '38a4Zab8v5iRZIBSWafNVP',   // tê do ralo lateral: virou Tê DN75 + 2 buchas 75x60
+    '0uh82hoVn9RxUDRnHr2yl9',   // tê do retorno filtrado: virou Tê DN75
+    '2AKpYMvzT3BvWJBXEUP1fS',   // bucha 75x50 retirada
+    '2AKpYMvzT3BvWJBXEUP1fU'    // bucha 75x50 retirada
+  ]
+};
+
+function marcarApontamentosFeitos() {
+  if (MODELO.chave !== 'piscina') return;
+  let feito = '';
+  try { feito = localStorage.getItem(APONT_FEITOS_KEY) || ''; } catch (err) { return; }
+  if (feito === APONT_FEITOS.versao) return;
+  let n = 0;
+  for (const g of APONT_FEITOS.guids)
+    for (const a of (apontamentos[g] || [])) { if (!a.resolvido) { a.resolvido = true; n++; } }
+  if (n) salvarApontamentos();
+  try { localStorage.setItem(APONT_FEITOS_KEY, APONT_FEITOS.versao); } catch (err) { }
+}
+
 function semearApontamentos() {
   if (MODELO.chave !== 'piscina') return;   // a lista é da verificação do modelo da piscina
   let feito = '';
@@ -2097,6 +2123,7 @@ function semearApontamentos() {
   try { localStorage.setItem(APONT_SEED_KEY, APONT_SEED_VERSAO); } catch (err) { }
 }
 semearApontamentos();
+marcarApontamentosFeitos();
 
 const apontDe = (e) => apontamentos[e.guid] || [];
 const abertosDe = (e) => apontDe(e).filter(a => !a.resolvido).length;

@@ -181,6 +181,13 @@ rodada: trocar a lista e a versão. **Conferir os GUIDs contra o modelo antes de
 A verificação em si (grafo `IfcRelConnectsPorts` × geometria) foi feita com scripts
 avulsos em Node, que não ficam no repositório.
 
+**Apontamento de peça já corrigida (`APONT_FEITOS`).** Quando uma correção entra no
+código, os GUIDs das peças envolvidas vão para essa lista: `marcarApontamentosFeitos()`
+marca como concluído, uma vez por navegador (chave `leitor-ifc-apont-feitos` + versão),
+todo apontamento preso a elas — inclusive os que o usuário escreveu, já que a marca é o
+GUID. O texto não é alterado e nenhum outro apontamento é tocado. Hoje: os 4 GUIDs das
+correções de 23/11/2026.
+
 ## Exportar o quantitativo em Excel
 
 Botão "Exportar Excel" na barra das abas (`#xlsxBtn`, `exportarQuantitativoXlsx` no fim do
