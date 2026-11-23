@@ -32,6 +32,17 @@ navegador; depois é só resolver ou excluir, que não voltam.
 O seletor no cabeçalho troca de modelo numa aba nova. Cada modelo guarda as próprias
 edições e os próprios apontamentos.
 
+## Instalar no celular
+
+O site é um app instalável. No **Android/Chrome**, abra
+<https://lucasgoncalves994.github.io/leitor-ifc/> e use o menu ⋮ → "Instalar
+aplicativo" (ou o aviso que aparece sozinho). No **iPhone/Safari**, botão de
+compartilhar → "Adicionar à Tela de Início".
+
+Depois de instalado ele abre em tela cheia, com ícone próprio, e **funciona sem
+internet**: o modelo que você já tiver aberto uma vez fica guardado no aparelho.
+Segurando o ícone aparecem atalhos para a Piscina e para a Hidráulica.
+
 ## Rodar
 
 O leitor busca `modelo.json` por `fetch`, que o navegador bloqueia em `file://`.
@@ -66,5 +77,8 @@ Esse arquivo abre com duplo clique, sem servidor e sem internet.
 | `modelo-R00.json` | Revisão R00, guardada como referência (renomeie para `modelo.json` para usá-la) |
 | `build_standalone.py` | Gera o HTML de arquivo único |
 | `preparar_modelo.py` | Converte um .ifc em `modelo.json` |
+| `manifest.json` | Manifesto do app instalável (nome, ícones, atalhos) |
+| `sw.js` | Service worker: deixa instalável e faz abrir offline |
+| `gerar_icones.py` | Desenha os ícones PNG do app |
 | `gerar_ifc_corrigido.py` | Grava um IFC novo com as correções das conexões |
 | `ARTST-...-R02-corrigido.ifc` | O IFC já corrigido (saída do script acima) |

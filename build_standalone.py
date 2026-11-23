@@ -53,6 +53,13 @@ assert n == 1, 'botao de baixar nao encontrado'
 html, n = re.subn(r'\s*<select id="modeloSel"[\s\S]*?</select>', '', html, count=1)
 assert n == 1, 'seletor de modelos nao encontrado'
 
+# 4d. manifesto, icones e service worker sao do site: no arquivo unico seriam
+#     links quebrados (e o SW nem roda em file://)
+for marca in ('pwa', 'pwa:js'):
+    html, n = re.subn(r'\s*<!-- %s:ini -->[\s\S]*?<!-- %s:fim -->' % (marca, marca),
+                      '', html, count=1)
+    assert n == 1, 'bloco %s nao encontrado' % marca
+
 # 5. fontes embutidas (subconjunto Latin1 do IBM Plex — cobre os acentos do português)
 FONTES = [
     ('IBM Plex Sans',           '400', 'IBMPlexSans-Regular-Latin1.woff2'),

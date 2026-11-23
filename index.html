@@ -4,6 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leitor IFC da Piscina</title>
+<meta name="description" content="Visualizador de IFC no navegador: modelo 3D, parâmetros, quantitativos e apontamentos.">
+<meta name="theme-color" content="#1d6fc4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141b" media="(prefers-color-scheme: dark)">
+<!-- pwa:ini --><!-- instalável no celular: manifesto, ícones e service worker -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon.png" sizes="48x48" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Leitor IFC">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- pwa:fim -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -3077,5 +3089,16 @@ if ($('#baixarBtn')) $('#baixarBtn').addEventListener('click', async (ev) => {
 
 iniciar();
 </script>
+<!-- pwa:js:ini -->
+<script>
+// Registra o service worker: é ele que torna o site instalável no celular e
+// faz o leitor abrir offline. Só em http(s) — no arquivo único não existe.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () { });
+  });
+}
+</script>
+<!-- pwa:js:fim -->
 </body>
 </html>

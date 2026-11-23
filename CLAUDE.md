@@ -361,6 +361,26 @@ a união e o corpo eram selecionados e contados juntos.
   O visor 3D tem a sua própria tabela (`TEMA3D`): fundo, grade, luzes, cor de
   foco e do conjunto, e um fator que aprofunda as cores no tema claro.
 
+## Instalar no celular (PWA)
+
+O site é instalável: `manifest.json` + `sw.js` + os ícones PNG (`icone-192`,
+`icone-512`, `icone-mascara-512`, `apple-touch-icon`, `favicon`), gerados por
+`gerar_icones.py` (um tê hidráulico branco sobre o azul `--accent`).
+
+- O Chrome do Android só oferece "instalar aplicativo" quando existem **manifesto
+  e service worker com `fetch`** — por isso o `sw.js` não é opcional.
+- `sw.js`: casca (HTML, scripts, ícones) pré-baixada na instalação e servida do
+  cache revalidando por trás; **modelos `.json` só entram no cache depois de
+  abertos uma vez** (6 a 20 MB, não dá para pré-baixar); `.ifc` e `.xlsx` ficam
+  sempre na rede, são downloads. Ao mudar o `sw.js`, subir a constante `VERSAO`,
+  senão o cache velho continua valendo.
+- No `index.html` tudo isso vive entre os marcadores `<!-- pwa:ini/fim -->`
+  (cabeça) e `<!-- pwa:js:ini/fim -->` (registro, no fim do corpo).
+  `build_standalone.py` apaga os dois: no arquivo único seriam links quebrados.
+- O painel de navegador do app Claude **não registra service worker**
+  ("unknown error when fetching the script") mesmo servindo o `sw.js` com 200;
+  conferir a instalação no celular ou no Chrome normal, não ali.
+
 ## Armadilhas conhecidas
 
 - `index.html` busca `modelo.json` por `fetch`: **não abre por `file://`**.

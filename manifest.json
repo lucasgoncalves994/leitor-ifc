@@ -1,0 +1,35 @@
+{
+  "name": "Leitor IFC — Art Stay",
+  "short_name": "Leitor IFC",
+  "description": "Visualizador de IFC no navegador: modelo 3D, parâmetros, quantitativos e apontamentos.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./index.html",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0f141b",
+  "theme_color": "#1d6fc4",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icone-mascara-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Piscina — Art Stay",
+      "short_name": "Piscina",
+      "url": "./index.html?modelo=piscina",
+      "icons": [{ "src": "icone-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Hidráulica — Tipo 1 e 2",
+      "short_name": "Hidráulica",
+      "url": "./index.html?modelo=hidro",
+      "icons": [{ "src": "icone-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
