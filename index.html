@@ -579,27 +579,7 @@ const MODOS = [
    então dá para comparar os dois lado a lado. Na versão de arquivo único o modelo
    vai embutido e o seletor é removido pelo build_standalone.py. */
 const MODELOS = [
-  {
-    chave: 'piscina', arquivo: 'modelo.json', nome: 'Piscina — Art Stay (R02)',
-    /* Correções do projetista sobre os apontamentos da verificação das ligações
-       (23/11/2026). O IFC não muda: o leitor aplica isto ao montar o modelo. */
-    fora: (e) => ['2AKpYMvzT3BvWJBXEUP1fS', '2AKpYMvzT3BvWJBXEUP1fU'].includes(e.guid),
-    correcoes: {
-      // os dois tês sem descrição são tê de 75, não tê de redução
-      trocar: [
-        { guid: '38a4Zab8v5iRZIBSWafNVP', dn: 75, descricao: 'Tê, DN75mm, PVC Marrom Soldável, conforme NBR 5648' },
-        { guid: '0uh82hoVn9RxUDRnHr2yl9', dn: 75, descricao: 'Tê, DN75mm, PVC Marrom Soldável, conforme NBR 5648' }
-      ],
-      // o tê do ralo lateral recebe duas buchas 75x60 que não foram modeladas:
-      // o leitor as desenha nas bocas de DN60, para o quantitativo fechar
-      criar: [{
-        noElemento: '38a4Zab8v5iRZIBSWafNVP', nasPortasDeDn: 60,
-        familia: 'PVC Marrom Soldável_Bucha de Reducão Curta', tipo: 'Bucha de Redução Curta',
-        descricao: 'Bucha de Redução Curta, DN75x60mm, PVC Marrom Soldável, conforme NBR 5648',
-        dn: 75, dnPortas: [75, 60], dnExterno: 75, dnInterno: 60, comprimento: 0.036
-      }]
-    }
-  },
+  { chave: 'piscina', arquivo: 'modelo.json', nome: 'Piscina — Art Stay (R02 corrigido)' },
   {
     chave: 'hidro', arquivo: 'modelo-hidro.json', nome: 'Hidráulica — Tipo 1 e 2',
     /* A rede de incêndio foi tirada deste modelo a pedido do projetista

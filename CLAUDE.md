@@ -3,6 +3,13 @@
 Leitor de IFC em navegador, escrito do zero para o modelo hidráulico da piscina
 do Art Stay (Unique). Não usa nenhuma biblioteca de IFC: o parser é próprio.
 
+**O `modelo.json` da piscina é hoje o R02 corrigido** (saída de
+`gerar_ifc_corrigido.py`, 23/11/2026): as 2 buchas 75x50 erradas não existem mais, os
+dois tês são Tê DN75 e as 2 buchas 75x60 são peças de verdade no arquivo. Por isso a
+entrada `piscina` em `MODELOS` **não tem mais `fora` nem `correcoes`** — mantê-las
+criaria as buchas de novo, em dobro. O motor (`aplicarCorrecoes`, `fora`) continua no
+código, usado pelo `hidro` e pronto para a próxima rodada.
+
 Estudo de caso: `ARTST-CHI-PIS-EX-0001-MOD-PISCINA_COMPLETA-R02.ifc`
 (`modelo.json`) — IFC2X3, exportado pelo Revit 2024 (PTB, 18/11/2026), unidade
 **centímetro**, 667 elementos (a separação das uniões está desligada), 499.542 triângulos,

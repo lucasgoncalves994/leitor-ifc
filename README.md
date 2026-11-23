@@ -26,7 +26,7 @@ navegador; depois é só resolver ou excluir, que não voltam.
 
 | Modelo | Endereço |
 |---|---|
-| Piscina — Art Stay (R02) | `index.html` |
+| Piscina — Art Stay (R02 corrigido) | `index.html` |
 | Hidráulica — Tipo 1 e 2 (sem a rede de incêndio) | `index.html?modelo=hidro` |
 
 O seletor no cabeçalho troca de modelo numa aba nova. Cada modelo guarda as próprias
