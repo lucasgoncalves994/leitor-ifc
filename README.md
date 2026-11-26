@@ -5,6 +5,17 @@ direto (parser próprio em JavaScript), mostra o modelo em 3D e extrai os
 parâmetros de cada elemento: diâmetro, marca, descrição, sistema, vazão e HMT
 (do próprio IFC quando o Revit os exporta; senão, reconstruídos pela geometria).
 
+## Girar e deslocar a vista
+
+| Gesto | O que faz |
+|---|---|
+| Botão do meio arrastando | desloca (vertical e horizontal) |
+| **Shift + botão do meio** | gira |
+| **Shift + arrastar o botão esquerdo** | gira (serve em trackpad e onde não há botão do meio) |
+| **Shift + setas** | gira pelo teclado (setas sozinhas deslocam) |
+| Roda do mouse / dois dedos | zoom no ponto do cursor |
+| Clique esquerdo parado | seleciona a peça (Shift ou Ctrl somam) |
+
 ## Editar peças
 
 No painel de uma peça (ou de um conjunto selecionado), "Editar nome, sistema e

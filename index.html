@@ -1155,11 +1155,15 @@ function instalarControles(cv) {
   };
 
   // 1 = girar (giroscópio), 2 = deslocar
-  // A câmera só se move com o botão do meio: sozinho desloca, com Shift gira.
-  // O esquerdo serve para selecionar e o direito para abrir apontamento; nenhum
-  // dos dois mexe na vista (decidido em 19/11/2026).
+  // Botão do meio: sozinho desloca (vertical e horizontal), com Shift gira.
+  // O esquerdo seleciona e o direito abre apontamento (19/11/2026) — mas
+  // Shift + arrastar o esquerdo também gira (26/11/2026), porque em aparelho
+  // sem botão do meio (trackpad, painel de navegador) não sobrava via nenhuma
+  // para o giro. Shift + clique parado continua somando à seleção: ela só
+  // acontece com `movido < 5`, e aí não houve arrasto.
   function modoDoBotao(e) {
     if (e.button === 1) return e.shiftKey ? 1 : 2;
+    if (e.button === 0 && e.shiftKey) return 1;
     return 0;
   }
 
@@ -1226,11 +1230,18 @@ function instalarControles(cv) {
   addEventListener('keydown', e => {
     const alvo = e.target;
     if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'SELECT')) return;
-    const passo = 22;
-    if (e.key === 'ArrowLeft') pan(passo, 0);
-    else if (e.key === 'ArrowRight') pan(-passo, 0);
-    else if (e.key === 'ArrowUp') pan(0, -passo);
-    else if (e.key === 'ArrowDown') pan(0, passo);
+    const passo = 22, giro = 0.08;
+    // as setas deslocam; Shift + setas giram, a mesma ideia do Shift + botão do
+    // meio — é o giro que funciona sem mouse nenhum
+    const seta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+                   ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (seta) {
+      const dx = seta[0], dy = seta[1];
+      if (e.shiftKey) {
+        orb.teta -= dx * giro;
+        orb.fi = Math.max(EPS, Math.min(Math.PI - EPS, orb.fi - dy * giro));
+      } else pan(-dx * passo, dy * passo);
+    }
     else if (e.key === 'Escape') { limparSelecao(); return; }
     else if (S.conj && (e.key === 'n' || e.key === 'N')) { passoConjunto(1); return; }
     else if (S.conj && (e.key === 'p' || e.key === 'P')) { passoConjunto(-1); return; }

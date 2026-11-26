@@ -302,15 +302,28 @@ a união e o corpo eram selecionados e contados juntos.
   `longe = r + diag×3`). Plano próximo fixo gastaria a precisão de
   profundidade e os tubos brigariam entre si com a vista afastada.
 
-- **Navegação só no botão do meio** (pedido de 19/11/2026): sozinho desloca
-  (vertical e horizontal), **Shift + meio gira**. O esquerdo só seleciona (parado,
-  `movido < 5`; Shift/Ctrl somam) e o direito parado abre apontamento — nenhum dos
-  dois mexe na câmera, e arrastar com eles não faz nada. `modoDoBotao` devolve 0
-  para eles, e por isso `movido` passou a ser contado em `pointermove` antes do
-  `if (!arrastando)`: sem isso, arrastar com o esquerdo e soltar longe contaria
-  como clique e selecionaria a peça errada. É preciso barrar `mousedown` do botão do meio, senão o Chrome abre a
-  rolagem automática. Shift + clique **parado** (menos de 5 px) soma à seleção;
-  com movimento é deslocamento.
+- **Navegação pelo botão do meio** (pedido de 19/11/2026): sozinho desloca
+  (vertical e horizontal), **Shift + meio gira**. O esquerdo seleciona (parado,
+  `movido < 5`; Shift/Ctrl somam) e o direito parado abre apontamento. `modoDoBotao`
+  devolve 0 para o direito, e por isso `movido` passou a ser contado em
+  `pointermove` antes do `if (!arrastando)`: sem isso, arrastar com o esquerdo e
+  soltar longe contaria como clique e selecionaria a peça errada. É preciso barrar
+  `mousedown` do botão do meio, senão o Chrome abre a rolagem automática.
+
+  **Mais duas vias para o giro (26/11/2026).** O giro dependia de um botão do meio,
+  que trackpad, celular e o painel de navegador do app Claude não têm — ali não
+  sobrava via nenhuma, e o giro parecia ter sumido. Então:
+  **Shift + arrastar o esquerdo gira** e **Shift + setas gira** (as setas sozinhas
+  continuam deslocando). O botão do meio não mudou. Shift + arrastar o esquerdo não
+  atropela a seleção porque ela só acontece com `movido < 5`: Shift + clique
+  **parado** continua somando à seleção, e um tremor de poucos pixels gira menos de
+  1° e ainda seleciona.
+  Conferido no Chromium com eventos reais de mouse (26/11/2026): meio sozinho
+  desloca 7,7 m sem mudar ângulo; Shift + meio, Shift + esquerdo e Shift + seta
+  giram sem mexer no alvo; arrastar o esquerdo sem Shift não mexe na vista; clique
+  parado seleciona e Shift + clique parado soma (conjunto = 2). O giro também foi
+  testado **depois** de clicar, dar zoom, abrir tabela, abrir popup de apontamento e
+  arrastar com o esquerdo: nunca trava.
 
 - **Contorno por peça, em tela** (`montarContorno`, `desenharContorno`). Um passo
   extra desenha a cena num alvo (número da peça + textura de profundidade) e um
