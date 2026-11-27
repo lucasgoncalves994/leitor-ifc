@@ -230,6 +230,36 @@ todo apontamento preso a elas — inclusive os que o usuário escreveu, já que 
 GUID. O texto não é alterado e nenhum outro apontamento é tocado. Hoje: os 4 GUIDs das
 correções de 23/11/2026.
 
+## Conjuntos salvos (agrupamentos de peças)
+
+Aba **Conjuntos** (`#pane-conjuntos`, `renderConjuntos`). Um conjunto é uma lista de
+GUIDs com nome, para guardar o recorte que deu origem a um quantitativo — a estação de
+VRP, uma prumada, um barrilete — e voltar nele com um clique. A linha da tabela usa
+`_els`/`_rotulo` de `tabela()`, então o clique cai em `selecionarConjunto` e enquadra,
+igual às tabelas de peças.
+
+- Ficam em `localStorage['leitor-ifc-conjuntos' + SUF_MODELO]` como
+  `[{ id, nome, data, guids }]`, por modelo e presos ao **GUID**: atravessam a troca de
+  revisão do IFC enquanto a peça mantiver o GUID. `idsDoConjunto` resolve GUID → índice
+  na hora; o que sumiu não entra na seleção e a coluna "Peças" mostra "(faltam n)".
+- "Salvar seleção" guarda a seleção atual (do visor ou de uma tabela). O botão **lê a
+  seleção no clique e nunca fica desabilitado**: a aba não é redesenhada quando a
+  seleção muda no visor, então um estado gravado na hora do desenho ficaria preso no
+  valor de quando a aba abriu — foi o primeiro erro desta aba, pego no teste.
+- Excluir pede **dois cliques** ("excluir" → "confirmar?") em vez de `confirm()`, que não
+  funciona em iframe sem `allow-modals` — o caso da página publicada do Claude. Um
+  clique em qualquer outro lugar cancela.
+- **Conjunto de partida (`CONJ_SEED`), só no `hidro`:** "VRP 1.1/2" — estação do 14º pav.
+  (prancha 35)", 26 peças (12 conexões, 4 registros/controle, 10 tubos). Os GUIDs saíram
+  de caminhar o grafo de portas a partir das duas VRPs MITECH, limitado à cota da estação
+  (z 57,4 a 60,9 m) — é o recorte usado para levantar o quantitativo das conexões. Entra
+  uma vez por navegador (`leitor-ifc-conj-semeados` + `CONJ_SEED_VERSAO`), como os
+  apontamentos. Para uma nova rodada, trocar a lista e a versão.
+- O que esse conjunto **não** inclui, porque o grafo de portas não alcança: os 2 filtros
+  Y, os 2 manômetros e a eliminadora de ar da estação. VRP e filtro Y têm 2 portas e só 1
+  ligada; os manômetros não têm nenhuma. A estação está **aberta** no modelo de
+  27/11/2026, e o nipel duplo bronze 1.1/2" da prancha não foi modelado.
+
 ## Exportar o quantitativo em Excel
 
 Botão "Exportar Excel" na barra das abas (`#xlsxBtn`, `exportarQuantitativoXlsx` no fim do

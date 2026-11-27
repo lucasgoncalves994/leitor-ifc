@@ -233,6 +233,8 @@ input[type=search],input[type=text]{
 
 /* painel do elemento */
 .empty{color:var(--text-faint);font-size:12px;padding:4px 0;line-height:1.6}
+a.del{color:var(--text-faint);cursor:pointer;text-decoration:underline}
+a.del.conf{color:var(--accent);font-weight:600;text-decoration:none}
 .keyparams{display:flex;flex-direction:column;gap:7px;margin-bottom:4px}
 .kp{
   background:var(--surface-2);border:1px solid var(--line-soft);
@@ -479,6 +481,7 @@ tbody tr.feito td:nth-child(5){text-decoration:line-through}   /* a coluna do te
     <button class="tab" data-pane="pecas-sistema">Peças e dispositivos por sistema</button>
     <button class="tab" data-pane="elementos">Elementos</button>
     <button class="tab" data-pane="apontamentos">Apontamentos</button>
+    <button class="tab" data-pane="conjuntos">Conjuntos</button>
     <span class="spacer"></span>
     <button class="btn" id="copyBtn">Copiar tabela</button>
     <button class="btn" id="xlsxBtn" title="Baixa uma planilha com o quantitativo do que está visível no visor">Exportar Excel</button>
@@ -490,6 +493,7 @@ tbody tr.feito td:nth-child(5){text-decoration:line-through}   /* a coluna do te
     <div class="tabpane" id="pane-pecas-sistema"></div>
     <div class="tabpane" id="pane-elementos"></div>
     <div class="tabpane" id="pane-apontamentos"></div>
+    <div class="tabpane" id="pane-conjuntos"></div>
   </div>
 </div>
 
@@ -2128,6 +2132,145 @@ function semearApontamentos() {
 semearApontamentos();
 marcarApontamentosFeitos();
 
+/* =========================================================
+   8b. Conjuntos salvos (agrupamentos de peças)
+   ========================================================= */
+/* Um conjunto é uma lista de GUIDs com nome. Serve para guardar o recorte que deu
+   origem a um quantitativo — a estação de VRP, uma prumada, um barrilete — e voltar
+   nele com um clique. Fica em localStorage por modelo (SUF_MODELO na chave), como as
+   edições e os apontamentos, e é preso ao GUID: atravessa a troca de revisão do IFC
+   enquanto a peça mantiver o GUID. Peça que sumiu não entra na seleção e a aba mostra
+   quantas faltaram. A linha usa `_els` da `tabela()`, então o clique cai em
+   `selecionarConjunto` e enquadra, igual às tabelas de peças. */
+const CONJ_KEY = 'leitor-ifc-conjuntos' + SUF_MODELO;
+let conjuntos = [];
+try { conjuntos = JSON.parse(localStorage.getItem(CONJ_KEY) || '[]') || []; } catch (err) { conjuntos = []; }
+const salvarConjuntos = () => { try { localStorage.setItem(CONJ_KEY, JSON.stringify(conjuntos)); } catch (err) { } };
+
+/* Conjunto de partida (só no hidro): a estação de VRP de 1.1/2", que na prancha 35
+   (ARTST-UNQ-CMP-EX-0035) é o DET VPR do 14º pavimento. Os 26 GUIDs saíram de caminhar
+   o grafo de portas a partir das duas VRPs MITECH, limitado à faixa de cota da estação
+   (z 57,4 a 60,9 m) — é exatamente o recorte usado para levantar o quantitativo das
+   conexões. Entra uma vez por navegador, marcado pela versão. */
+const CONJ_SEED_KEY = 'leitor-ifc-conj-semeados' + SUF_MODELO;
+const CONJ_SEED_VERSAO = 'hidro-vrp-1pol5-2026-11-27';
+const CONJ_SEED = MODELO.chave !== 'hidro' ? [] : [{
+  id: 'vrp-1pol5',
+  nome: 'VRP 1.1/2" — estação do 14º pav. (prancha 35)',
+  data: '2026-11-27',
+  guids: [
+    '1CXIFTsYn5hRrxP4fSPkCC', '0e3pVZrU12OwkfEV4yvemK', '1CXIFTsYn5hRrxP4fSPkC0',
+    '0e3pVZrU12OwkfEV4yvemS', '1CXIFTsYn5hRrxP4fSPkCw', '0e3pVZrU12OwkfEV4yvem6',
+    '0e3pVZrU12OwkfEV4yveou', '0e3pVZrU12OwkfEV4yveo7', '1CXIFTsYn5hRrxP4fSPkAK',
+    '1CXIFTsYn5hRrxP4fSPkEG', '1CXIFTsYn5hRrxP4fSPkC6', '0e3pVZrU12OwkfEV4yvemU',
+    '0O39bLDgL67vG9DF229soJ', '0e3pVZrU12OwkfEV4yvemA', '1CXIFTsYn5hRrxP4fSPkCE',
+    '0e3pVZrU12OwkfEV4yvemL', '1CXIFTsYn5hRrxP4fSPkAA', '0e3pVZrU12OwkfEV4yvemG',
+    '1CXIFTsYn5hRrxP4fSPkC8', '0e3pVZrU12OwkfEV4yvemO', '1CXIFTsYn5hRrxP4fSPkCy',
+    '0e3pVZrU12OwkfEV4yvem0', '1CXIFTsYn5hRrxP4fSPkAM', '1CXIFTsYn5hRrxP4fSPkAJ',
+    '1CXIFTsYn5hRrxP4fSPkEI', '1CXIFTsYn5hRrxP4fSPkEF'
+  ]
+}];
+
+function semearConjuntos() {
+  if (!CONJ_SEED.length) return;
+  let marca = '';
+  try { marca = localStorage.getItem(CONJ_SEED_KEY) || ''; } catch (err) { }
+  if (marca === CONJ_SEED_VERSAO) return;
+  for (const c of CONJ_SEED) if (!conjuntos.some(x => x.id === c.id)) conjuntos.push(c);
+  salvarConjuntos();
+  try { localStorage.setItem(CONJ_SEED_KEY, CONJ_SEED_VERSAO); } catch (err) { }
+}
+semearConjuntos();
+
+// GUIDs -> índices no modelo aberto; o que não existe fica de fora
+function idsDoConjunto(c) {
+  const porGuid = new Map(S.model.elements.map(e => [e.guid, e.i]));
+  const ids = [];
+  for (const g of c.guids) { const i = porGuid.get(g); if (i != null) ids.push(i); }
+  return ids;
+}
+
+function salvarSelecaoComoConjunto(nome) {
+  const ids = S.conj && S.conj.ids.length ? S.conj.ids.slice() : (S.sel >= 0 ? [S.sel] : []);
+  if (!ids.length) return;
+  conjuntos.push({
+    id: 'u' + Date.now().toString(36),
+    nome: (nome || '').trim() || ('Conjunto de ' + ids.length + ' peças'),
+    data: new Date().toISOString().slice(0, 10),
+    guids: ids.map(i => S.model.elements[i].guid).filter(Boolean)
+  });
+  salvarConjuntos();
+  renderConjuntos();
+}
+
+let conjParaExcluir = null;   // exclusão em dois cliques (confirm() não funciona em iframe)
+
+function renderConjuntos() {
+  const p = $('#pane-conjuntos'); if (!p) return;
+  p.innerHTML = '';
+
+  const barra = el('div');
+  barra.style.cssText = 'display:flex;gap:9px;align-items:center;margin-bottom:9px;flex-wrap:wrap';
+  const campo = el('input');
+  campo.type = 'text';
+  campo.placeholder = 'Nome do conjunto';
+  campo.style.cssText = 'min-width:220px';
+  /* O botão fica sempre ativo e lê a seleção na hora do clique: a aba não é
+     redesenhada quando a seleção muda no visor, então um estado "desabilitado"
+     gravado aqui ficaria preso no valor de quando a aba abriu. */
+  const bSalvar = el('button', 'btn pri', 'Salvar seleção');
+  bSalvar.title = 'Guarda as peças selecionadas agora como um conjunto';
+  const aviso = el('span', 'empty', '');
+  bSalvar.onclick = () => {
+    const n = S.conj && S.conj.ids.length ? S.conj.ids.length : (S.sel >= 0 ? 1 : 0);
+    if (!n) { aviso.textContent = 'Selecione peças no visor ou numa tabela antes de salvar.'; return; }
+    salvarSelecaoComoConjunto(campo.value);
+  };
+  barra.appendChild(campo); barra.appendChild(bSalvar);
+  barra.appendChild(el('span', 'chip', conjuntos.length + (conjuntos.length === 1 ? ' conjunto' : ' conjuntos')));
+  barra.appendChild(aviso);
+  p.appendChild(barra);
+
+  if (!conjuntos.length) {
+    p.appendChild(Object.assign(el('p', 'empty'), { innerHTML:
+      'Nenhum conjunto salvo. Selecione peças no visor (Shift+clique soma) ou numa tabela ' +
+      'e use <b>Salvar seleção</b>. O conjunto fica guardado neste navegador.' }));
+    tabelaAtual = [];
+    return;
+  }
+
+  const linhas = conjuntos.map(c => {
+    const ids = idsDoConjunto(c);
+    const faltam = c.guids.length - ids.length;
+    const cats = {};
+    for (const i of ids) { const k = S.model.elements[i].categoria; cats[k] = (cats[k] || 0) + 1; }
+    const resumo = Object.keys(cats).sort().map(k => cats[k] + ' ' + k.toLowerCase()).join(', ');
+    const aviso = conjParaExcluir === c.id ? 'conf' : '';
+    return {
+      _els: ids, _chave: 'conj:' + c.id, _rotulo: c.nome,
+      c: [c.nome, ids.length + (faltam ? ' (faltam ' + faltam + ')' : ''), resumo, c.data || '',
+          { html: '<a class="del ' + aviso + '" data-del="' + c.id + '">' +
+                  (aviso ? 'confirmar?' : 'excluir') + '</a>',
+            txt: '' }]
+    };
+  });
+  p.appendChild(tabela([{ t: 'Conjunto' }, { t: 'Peças', n: 1 }, { t: 'Composição' },
+                        { t: 'Criado em' }, { t: '' }], linhas));
+  marcarLinha();
+}
+
+/* "excluir" pede um segundo clique e não pode disparar a seleção da linha */
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest && ev.target.closest('[data-del]');
+  if (!a) { if (conjParaExcluir) { conjParaExcluir = null; if (S.pane === 'conjuntos') renderConjuntos(); } return; }
+  ev.stopPropagation(); ev.preventDefault();
+  const id = a.dataset.del;
+  if (conjParaExcluir !== id) { conjParaExcluir = id; renderConjuntos(); return; }
+  conjuntos = conjuntos.filter(x => x.id !== id);
+  conjParaExcluir = null;
+  salvarConjuntos(); renderConjuntos();
+}, true);
+
 const apontDe = (e) => apontamentos[e.guid] || [];
 const abertosDe = (e) => apontDe(e).filter(a => !a.resolvido).length;
 const totalApont = () => Object.values(apontamentos).reduce((t, l) => t + l.length, 0);
@@ -2674,6 +2817,7 @@ function mostrarPane(id) {
   const fn = { resumo: renderResumo, sistemas: renderSistemas, pecas: renderPecas, 'pecas-sistema': renderPecasSistema };
   if (fn[id]) fn[id](quantitativos(S.model, (e) => elementoVisivel(e.i)));
   else if (id === 'apontamentos') renderApontamentos();
+  else if (id === 'conjuntos') renderConjuntos();
   else renderCorpoElementos();
   marcarLinha();
 }
