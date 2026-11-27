@@ -28,8 +28,26 @@ Trocar de revisão: `python preparar_modelo.py <ifc>` e `python build_standalone
 
 `MODELOS` (em `index.html`) lista o que está publicado: `modelo.json` (piscina, o
 estudo de caso) e `modelo-hidro.json` (**HIDRO TIPO 1 E 2**, Revit 2024, IFC2X3, unidade
-**metro**, 71,5 MB de IFC → 19,3 MB de JSON, 5.310 elementos, 2.353.552 triângulos,
-3.530,35 m de tubo, 8 pavimentos, 4 sistemas, DN 25 a 89; a montagem leva ~23 s no Node).
+**metro**). O hidro está hoje na modelagem de **27/11/2026**
+(`HIDRO TIPO 1 E 2-MODELAGEM.ifc`, 80,7 MB de IFC → 19,9 MB de JSON): 8.542 elementos no
+arquivo, **8.207 publicados** (a rede de incêndio sai, ver abaixo), 4.388.774 triângulos,
+4.407,77 m de tubo, 9 pavimentos, 4 sistemas nomeados, DN 13 a 75; a montagem leva ~16 s.
+A revisão anterior (`HIDRO TIPO 1 E 2(LUCAS).ifc`, 71,5 MB → 19,3 MB, 5.310 elementos,
+2.353.552 triângulos, 3.530,35 m de tubo) só existe no histórico do git.
+
+**Onde está a VRP no `hidro`.** A estação de válvula redutora de pressão aparece em três
+cotas (z ≈ 22, 40 e 59 m), sempre no mesmo eixo (x ≈ 3,4; y ≈ −1,5 a −2,7), e cada uma tem
+**duas linhas em paralelo** separadas por 40 cm. Por linha: uma VRP
+`3 - MITECH-Valvula redutora de pressao flangeada-VRP PREMUIM` (2" nas duas estações de
+baixo, 1 1/2" na de cima), um `Y_strainer-Caleffi-577` (2 1/2", 2 1/2" e 1 1/2") e um
+`Manômetro de Pressao`; por estação, uma `Valvula Eliminadora de AR 1/2"` logo acima.
+Bate com os três detalhes da prancha 35 (`ARTST-UNQ-CMP-EX-0035`, R00 de 10/11/2026).
+Duas armadilhas: a modelagem de 27/11/2026 **não traz mais o comentário `VRP - PAV n`**
+que a revisão anterior punha no parâmetro Comentários (eram `VRP - PAV 3` e `VRP - PAV 10`,
+139 peças), então buscar "VRP" na aba Elementos não acha mais nada — hoje a VRP se acha
+pelo nome da família. E os nomes de nível não ajudam a dizer qual é o 3º, o 9º e o 14º
+pavimento da prancha: cinco cotas diferentes se chamam `1Pavimento`, então a
+correspondência tem de ser feita pela cota.
 A página escolhe pelo `?modelo=<chave>` da URL (sem nada, a piscina); também aceita o nome
 de um `.json` da própria pasta. O seletor no cabeçalho (`#modeloSel`,
 `montarSeletorModelo`) abre o outro modelo **numa aba nova** e deixa a atual como está.
@@ -67,10 +85,15 @@ sem descrição, 0 referência a entidade inexistente.
 `window.FILTRO_ELEMENTO` em `iniciar()`; `buildIfcModel` consulta esse filtro **antes**
 de guardar a peça, então ela não entra em geometria, tabela nem quantitativo (abrir um
 IFC do computador limpa o filtro). No `hidro` sai a **rede de incêndio** a pedido do
-projetista (19/11/2026): tudo que casa com `tupy` (8 tubos de aço K10 e ~130 conexões
-TupyGrooved) e as 22 caixas `00322800` 2 1/2" coladas nelas. O modelo vai de 5.310 para
-**5.150 elementos**, de 2.353.552 para **2.124.706 triângulos** e de 3.530,35 para
-**3.431,80 m** de tubo; o DN 89 some da legenda.
+projetista (19/11/2026): tudo que casa com `tupy` (tubo de aço K10 e conexões
+TupyGrooved) e as caixas `00322800` 2 1/2" coladas nelas. Na modelagem de 27/11/2026 o
+modelo vai de 8.542 para **8.207 elementos**, de 4.812.686 para **4.388.774 triângulos**
+e de 4.605,79 para **4.407,77 m** de tubo; os **DN 10 e DN 80 somem** da legenda.
+Conferido nessa revisão: nenhuma peça que casa com o filtro sobra no modelo publicado, e
+o que sai é só rede de incêndio (acoplamentos e cotovelos TupyGrooved, tubo Tupy aço
+carbono K10, tês de redução, adaptadores e as caixas `00322800`). Na revisão anterior era
+5.310 → 5.150 elementos, 2.353.552 → 2.124.706 triângulos, 3.530,35 → 3.431,80 m, e saía
+o DN 89.
 
 ## O problema que originou o projeto
 
